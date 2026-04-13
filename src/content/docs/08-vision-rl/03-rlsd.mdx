@@ -19,6 +19,8 @@ references:
     url: "https://arxiv.org/abs/1707.06347"
 ---
 
+import Mermaid from '../../../components/learning/Mermaid.tsx';
+
 ## 자기 증류(Self-Distillation)의 직관
 
 지식 증류(knowledge distillation)의 전통적인 패러다임은 **교사(teacher) → 학생(student)** 구조입니다. 큰 모델의 지식을 작은 모델로 전달합니다. 그러나 이 패러다임은 항상 더 강력한 외부 교사 모델이 필요하다는 제약이 있습니다.
@@ -39,6 +41,16 @@ RL의 맥락에서 자기 증류는 다음과 같이 작동합니다.
 업데이트된 정책 π_{θ+1}
     ↓ (반복)
 ```
+
+<Mermaid chart={`graph TD
+    Teacher["교사 모델\n(대형 VLM)"] --> Gen["고품질 응답 생성"]
+    Gen --> Filter["검증 기반 필터링"]
+    Filter --> Data["자기 증류 데이터"]
+    Data --> Student["학생 모델 훈련\n(동일 모델)"]
+    Student --> RL["RL 미세조정\n(검증 가능 보상)"]
+    RL --> Improved["개선된 모델"]
+    Improved -.->|"다음 라운드"| Teacher
+`} caption="RLSD 파이프라인: 외부 교사 없이 자기 증류로 반복적 자기 개선" client:load />
 
 ## SDPO: Self-Distilled Preference Optimization
 

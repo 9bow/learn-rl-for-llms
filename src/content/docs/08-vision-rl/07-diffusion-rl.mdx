@@ -19,6 +19,8 @@ references:
     url: "https://arxiv.org/abs/2601.12401"
 ---
 
+import Mermaid from '../../../components/learning/Mermaid.tsx';
+
 ## 확산 모델과 RL의 만남
 
 **확산 모델(diffusion model)** 은 현재 이미지, 오디오, 비디오 생성의 지배적인 패러다임입니다. DALL-E, Stable Diffusion, Midjourney 등이 모두 확산 모델 기반입니다. 그러나 확산 모델의 표준 훈련 방식(노이즈 예측 최소화)은 특정 목표를 직접 최적화하지 않는다.
@@ -37,6 +39,15 @@ references:
 $$r(x_0) = \text{RewardModel}(x_0, \text{prompt})$$
 
 전체 에피소드는 $T$ 스텝의 디노이징 과정이며, 보상은 에피소드 마지막($t=0$)에만 주어진다.
+
+<Mermaid chart={`graph LR
+    Noise["가우시안 노이즈"] --> Denoise["단계별 디노이징\n(역확산 과정)"]
+    Denoise --> Image["생성 이미지"]
+    Image --> RM["보상 모델\n(미적 점수/정렬도)"]
+    RM --> Reward["보상 r"]
+    Reward --> DDPO["DDPO 업데이트\n(디노이징 정책 최적화)"]
+    DDPO --> Denoise
+`} caption="Diffusion RL (DDPO) 과정: 역확산 과정을 MDP로 모델링하여 보상 기반 정책 최적화" client:load />
 
 ## DDPO: Denoising Diffusion Policy Optimization
 

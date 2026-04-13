@@ -23,6 +23,24 @@ references:
     url: "https://arxiv.org/abs/2310.10080"
 ---
 
+import Mermaid from '../../../components/learning/Mermaid.tsx';
+
+## ORM vs PRM 비교
+
+<Mermaid chart={`graph TD
+    subgraph "ORM (결과 보상 모델)"
+        O1["문제"] --> O2["전체 풀이 생성"]
+        O2 --> O3["최종 답변만 평가"]
+        O3 --> O4["보상: 맞음/틀림"]
+    end
+    subgraph "PRM (과정 보상 모델)"
+        P1["문제"] --> P2["단계별 풀이"]
+        P2 --> P3["각 단계 평가"]
+        P3 --> P4["단계별 보상"]
+        P4 --> P5["오류 단계 조기 탐지"]
+    end
+`} caption="ORM은 최종 결과만 평가하지만 PRM은 각 추론 단계를 개별적으로 평가하여 세밀한 학습 신호를 제공한다" client:load />
+
 ## 보상 모델의 두 가지 패러다임
 
 추론 과제에서 RL을 적용할 때, 언제 어떻게 보상을 부여하느냐는 학습의 질을 결정한다. 이에 따라 두 가지 패러다임이 존재한다.

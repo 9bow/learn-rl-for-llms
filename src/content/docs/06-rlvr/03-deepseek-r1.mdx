@@ -15,6 +15,19 @@ references:
     url: "https://arxiv.org/abs/2501.12948"
 ---
 
+import Mermaid from '../../../components/learning/Mermaid.tsx';
+
+## DeepSeek-R1 훈련 파이프라인
+
+<Mermaid chart={`graph TD
+    Base["DeepSeek-V3 Base"] --> Cold["Cold Start\n소량 CoT 데이터 SFT"]
+    Cold --> RLVR["RLVR 훈련\n(수학/코드 검증 보상)"]
+    RLVR --> Reject["거부 샘플링\n800K 데이터 생성"]
+    Reject --> SFT2["SFT 2차 훈련"]
+    SFT2 --> RL2["RL 2차 훈련\n(규칙 기반 보상)"]
+    RL2 --> Final["DeepSeek-R1"]
+`} caption="DeepSeek-R1은 Cold Start SFT → RLVR → 거부 샘플링 SFT → 최종 RL의 4단계 파이프라인으로 훈련된다" client:load />
+
 ## DeepSeek-R1의 의의
 
 DeepSeek-R1 (2025년 1월)은 오픈소스 LLM 추론 연구의 이정표다. OpenAI o1과 동등한 성능을 오픈소스로 달성하면서, 순수 RL로 추론 능력이 자발적으로 출현할 수 있음을 증명했다. 기술 보고서와 모델 가중치를 모두 공개하여 재현 가능한 연구의 기준을 세웠으며, Nature에도 게재(2025)되었다.

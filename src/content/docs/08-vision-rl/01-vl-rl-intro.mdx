@@ -19,6 +19,8 @@ references:
     url: "https://arxiv.org/abs/2304.15010"
 ---
 
+import Mermaid from '../../../components/learning/Mermaid.tsx';
+
 ## VLM이란 무엇인가
 
 **비전-언어 모델(Vision-Language Model, VLM)** 은 이미지와 텍스트를 동시에 처리하는 멀티모달 AI 시스템입니다. 현대 VLM의 표준 아키텍처는 세 구성 요소로 이루어집니다.
@@ -36,6 +38,18 @@ LLM (예: LLaMA, Qwen)
 ```
 
 **Vision Encoder** 는 이미지를 고차원 특징 벡터로 변환합니다. CLIP(Contrastive Language-Image Pre-Training)이나 SigLIP 기반 ViT가 주로 사용됩니다. **Projection Layer** 는 시각 특징을 LLM의 토큰 임베딩 공간으로 매핑합니다. 이 레이어의 설계가 멀티모달 이해 품질에 큰 영향을 미친다. **LLM** 은 텍스트 토큰과 시각 토큰을 함께 처리하여 응답을 생성합니다.
+
+<Mermaid chart={`graph TD
+    Image["이미지 입력"] --> VEncoder["Vision Encoder\n(ViT/SigLIP)"]
+    Text["텍스트 프롬프트"] --> LLM["LLM Backbone"]
+    VEncoder --> Proj["프로젝션 레이어"]
+    Proj --> LLM
+    LLM --> Response["응답 생성"]
+    Response --> RM["보상 모델/검증기"]
+    RM --> Signal["보상 신호"]
+    Signal --> RL["RL 최적화\n(PPO/DPO/GRPO)"]
+    RL --> LLM
+`} caption="Vision-Language RL 개요: 이미지와 텍스트를 통합하여 RL로 최적화하는 VLM 파이프라인" client:load />
 
 ## 텍스트 RL과 VLM RL의 차이
 

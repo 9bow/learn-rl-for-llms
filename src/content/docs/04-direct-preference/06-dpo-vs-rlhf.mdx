@@ -23,6 +23,20 @@ references:
     url: "https://arxiv.org/abs/2305.18290"
 ---
 
+import Mermaid from '../../../components/learning/Mermaid.tsx';
+
+## 어떤 방법을 선택할까
+
+<Mermaid chart={`graph TD
+    Start["정렬 방법 선택"] --> Q1{"대규모 계산 자원이\n있는가?"}
+    Q1 -->|"예"| Q2{"실시간 보상 모델이\n필요한가?"}
+    Q1 -->|"아니오"| DPO["DPO 계열 선택"]
+    Q2 -->|"예"| RLHF["PPO 기반 RLHF"]
+    Q2 -->|"아니오"| Q3{"다양한 보상 신호가\n필요한가?"}
+    Q3 -->|"예"| RLHF
+    Q3 -->|"아니오"| DPO
+`} caption="DPO와 RLHF 중 선택을 위한 의사결정 흐름도" client:load />
+
 ## 비교의 맥락
 
 DPO와 PPO 기반 RLHF는 동일한 목표(인간 선호에 맞는 LLM 훈련)를 서로 다른 방식으로 달성합니다. 어느 쪽이 더 낫다는 단순한 답은 없으며, 태스크 유형, 데이터 규모, 컴퓨팅 자원에 따라 최적 선택이 달라진다.

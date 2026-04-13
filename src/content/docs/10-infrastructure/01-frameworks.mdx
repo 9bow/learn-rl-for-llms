@@ -19,6 +19,8 @@ references:
     url: "https://arxiv.org/abs/2506.06122"
 ---
 
+import Mermaid from '../../../components/learning/Mermaid.tsx';
+
 ## RLHF 프레임워크 개요
 
 RLHF(Reinforcement Learning from Human Feedback)를 대규모 언어 모델에 적용하려면 분산 학습, 고속 추론, 멀티 모델 조율 등 복잡한 인프라가 필요합니다. 이를 위해 여러 오픈소스 프레임워크가 개발되었으며, 각각 설계 철학과 지원 기능이 다릅니다.
@@ -91,6 +93,18 @@ ROLL(Robust Online LLM Reinforcement Learning, arXiv:2506.06122)은 Alibaba Grou
 - 비동기 롤아웃과 학습의 파이프라이닝
 - 보상 해킹 완화를 위한 자동 보상 정규화
 - 대규모 온라인 서비스 환경에 적합한 설계
+
+<Mermaid chart={`graph TD
+    subgraph "TRL (Hugging Face)"
+        T1["단일 GPU/소규모"] --> T2["SFTTrainer\nDPOTrainer\nPPOTrainer"]
+    end
+    subgraph "OpenRLHF"
+        O1["Ray 기반 분산"] --> O2["Actor-Critic 분리\n70B+ 모델 지원"]
+    end
+    subgraph "veRL (Volcano Engine)"
+        V1["FSDP/Megatron 통합"] --> V2["유연한 병렬화\nGPU 활용 극대화"]
+    end
+`} caption="RL 훈련 프레임워크 비교: 규모와 요구사항에 따라 적합한 프레임워크가 다르다" client:load />
 
 ## 프레임워크 기능 비교
 

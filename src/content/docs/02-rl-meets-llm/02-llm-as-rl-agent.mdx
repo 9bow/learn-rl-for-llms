@@ -23,6 +23,8 @@ references:
     url: "https://arxiv.org/abs/1909.08593"
 ---
 
+import Mermaid from '../../../components/learning/Mermaid.tsx';
+
 ## LLM 텍스트 생성의 MDP 매핑
 
 LLM의 텍스트 생성 과정은 자연스럽게 마르코프 결정 과정(MDP)으로 해석될 수 있습니다. 각 구성 요소를 대응시키면:
@@ -34,6 +36,23 @@ LLM의 텍스트 생성 과정은 자연스럽게 마르코프 결정 과정(MDP
 | 정책 $\pi_\theta$ | LLM의 확률 분포 | $\pi_\theta(a_t \mid s_t) = P_\theta(y_{t+1} \mid x, y_{1:t})$ |
 | 전이 $P$ | 결정적 전이 | $s_{t+1} = (s_t, a_t)$, 선택한 토큰을 시퀀스에 추가 |
 | 보상 $r_t$ | 문장/토큰 수준 점수 | 설정에 따라 다름 (아래 상세 설명) |
+
+<Mermaid chart={`
+graph LR
+    subgraph RL["RL Framework"]
+        S["State\nPrompt + Prev Tokens"]
+        A["Action\nNext Token"]
+        R["Reward\nQuality Score"]
+    end
+    subgraph LLM["LLM View"]
+        P["Prompt x"]
+        T["Token y_t"]
+        F["Feedback Score"]
+    end
+    S -.-> P
+    A -.-> T
+    R -.-> F
+`} caption="Figure 1: LLM as RL Agent Mapping" client:load />
 
 이 매핑에서 중요한 특성은 전이 함수가 **결정적(deterministic)** 이라는 점입니다. 행동(토큰)이 결정되면 다음 상태는 유일하게 정해집니다. 따라서 LLM RL의 확률성은 오직 정책(토큰 샘플링)에서 비롯됩니다.
 

@@ -23,6 +23,8 @@ references:
     url: "https://arxiv.org/abs/1506.02438"
 ---
 
+import Mermaid from '../../../components/learning/Mermaid.tsx';
+
 ## Actor-Critic 구조
 
 **Actor-Critic** 은 정책 기반(Actor)과 가치 기반(Critic)의 장점을 결합한 아키텍처입니다.
@@ -39,6 +41,21 @@ $$A^\pi(s, a) = Q^\pi(s, a) - V^\pi(s)$$
 $$A_t \approx r_t + \gamma V_\phi(s_{t+1}) - V_\phi(s_t)$$
 
 이를 **TD 어드밴티지(TD Advantage)** 또는 **1-step 어드밴티지** 라 합니다.
+
+<Mermaid chart={`
+graph TD
+    State["State s_t"] --> Actor["Actor\nPolicy Network"]
+    State --> Critic["Critic\nValue Network"]
+    Actor --> Action["Action a_t"]
+    Action --> Env["Environment"]
+    Env --> Reward["Reward r_t"]
+    Env --> NextState["Next State s_t+1"]
+    Critic --> Value["V(s_t)"]
+    Reward --> TD["TD Error\nd = r + gV(s) - V(s)"]
+    Value --> TD
+    TD --> Actor
+    TD --> Critic
+`} caption="Figure 1: Actor-Critic Architecture" client:load />
 
 ## 일반화 어드밴티지 추정 (GAE)
 

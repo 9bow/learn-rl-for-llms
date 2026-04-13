@@ -19,6 +19,8 @@ references:
     url: "https://arxiv.org/abs/2308.03688"
 ---
 
+import Mermaid from '../../../components/learning/Mermaid.tsx';
+
 ## LLM 에이전트란 무엇인가
 
 **LLM 에이전트(LLM Agent)** 는 언어 모델을 핵심 추론 엔진으로 사용하여 환경과 상호작용하고 목표를 달성하는 자율 시스템입니다. 단순한 질문-답변 시스템과 달리, 에이전트는 **행동의 결과를 관찰하고 다음 행동을 조정** 합니다.
@@ -46,6 +48,17 @@ references:
 | 로봇 제어 | 모터 명령, 경로 계획 | 연속 |
 | 소셜 미디어 | 게시, 검색, 팔로우 | 이산 |
 | 게임 환경 | 이동, 공격, 상호작용 | 이산 |
+
+<Mermaid chart={`graph TD
+    Agent["LLM 에이전트"] --> Observe["환경 관찰\n(텍스트/스크린샷)"]
+    Observe --> Think["추론\n(행동 계획)"]
+    Think --> Act["행동 실행\n(도구 호출/클릭/입력)"]
+    Act --> Env["환경 상태 변화"]
+    Env --> Reward["보상 계산\n(태스크 완료/부분 진행)"]
+    Reward --> Update["정책 업데이트"]
+    Update --> Agent
+    Env --> Observe
+`} caption="에이전트 RL 상호작용 루프: LLM 에이전트가 환경과 반복 상호작용하며 정책을 개선" client:load />
 
 ## SFT 기반 에이전트의 한계
 

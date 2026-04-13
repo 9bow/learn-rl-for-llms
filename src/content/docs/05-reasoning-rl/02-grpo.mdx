@@ -19,6 +19,18 @@ references:
     url: "https://arxiv.org/abs/2501.12948"
 ---
 
+import Mermaid from '../../../components/learning/Mermaid.tsx';
+
+## GRPO 알고리즘 흐름
+
+<Mermaid chart={`graph TD
+    Q["질문 q"] --> Sample["G개 응답 샘플링\n{o₁, ..., o_G}"]
+    Sample --> Reward["각 응답 보상 계산\n{r₁, ..., r_G}"]
+    Reward --> Normalize["그룹 내 정규화\nÂᵢ = (rᵢ - μ) / σ"]
+    Normalize --> Update["정책 업데이트\n높은 Â → 확률 증가\n낮은 Â → 확률 감소"]
+    Update --> KL["KL 정규화"]
+`} caption="GRPO는 동일 질문에서 G개 응답을 샘플링하고 그룹 내 상대적 보상으로 advantage를 추정한다" client:load />
+
 ## PPO의 Critic 문제
 
 PPO(Proximal Policy Optimization)는 강력한 RL 알고리즘이지만 LLM 훈련에서 실용적 문제가 있다. Advantage를 추정하기 위해 **Critic(가치 함수) 모델** 이 필요하며, 이 모델은 정책 모델과 동일한 크기를 가져야 정확한 추정이 가능하다. 결과적으로 전체 시스템은 정책 모델, 참조 모델, 보상 모델, Critic 모델의 4개 모델을 동시에 메모리에 올려야 한다.
