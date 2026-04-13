@@ -1,0 +1,101 @@
+---
+title: "정책과 가치 함수"
+description: "정책 π(a|s), 상태 가치 함수 V^π(s), 행동 가치 함수 Q^π(s,a)와 벨만 방정식을 학습합니다."
+sidebar:
+  order: 2
+learning_objectives:
+  - "정책(policy)의 수학적 표현과 결정적/확률적 정책의 차이를 설명할 수 있다"
+  - "상태 가치 함수와 행동 가치 함수의 벨만 기대 방정식을 유도할 수 있다"
+  - "가치 기반 방법과 정책 기반 방법의 장단점을 비교할 수 있다"
+estimated_minutes: 30
+references:
+  - title: "Reinforcement Learning: An Introduction (2nd ed.)"
+    authors: "Sutton, R. S., & Barto, A. G."
+    year: 2018
+    url: "http://incompleteideas.net/book/the-book-2nd.html"
+  - title: "Playing Atari with Deep Reinforcement Learning"
+    authors: "Mnih, V., et al."
+    year: 2013
+    url: "https://arxiv.org/abs/1312.5602"
+  - title: "Human-level control through deep reinforcement learning"
+    authors: "Mnih, V., et al."
+    year: 2015
+    url: "https://www.nature.com/articles/nature14236"
+---
+
+## 정책(Policy)의 정의
+
+**정책(policy)** $\pi$는 에이전트의 행동 전략을 정의합니다. 각 상태에서 어떤 행동을 선택할지를 결정하는 함수입니다.
+
+**결정적 정책(Deterministic Policy)** 은 각 상태에 정확히 하나의 행동을 매핑합니다:
+
+$$\pi(s) = a$$
+
+**확률적 정책(Stochastic Policy)** 은 각 상태에서 행동에 대한 확률 분포를 출력합니다:
+
+$$\pi(a \mid s) = P(A_t = a \mid S_t = s)$$
+
+LLM의 텍스트 생성은 본질적으로 확률적 정책입니다. 각 상태(현재까지 생성된 토큰 시퀀스)에서 다음 토큰(행동)의 확률 분포를 출력합니다. 확률적 정책은 탐색(exploration)을 자연스럽게 내포하므로, 강화학습에서 더 광범위하게 활용됩니다.
+
+## 상태 가치 함수 V^π(s)
+
+**상태 가치 함수(State Value Function)** $V^\pi(s)$는 정책 $\pi$를 따를 때 상태 $s$에서 시작하여 얻을 수 있는 기대 누적 보상입니다:
+
+$$V^\pi(s) = \mathbb{E}_\pi \left[ G_t \mid S_t = s \right] = \mathbb{E}_\pi \left[ \sum_{k=0}^{\infty} \gamma^k R_{t+k+1} \mid S_t = s \right]$$
+
+이 함수는 "현재 상태가 얼마나 좋은가?"를 측정합니다. 가치가 높은 상태는 미래에 높은 보상을 기대할 수 있는 상태입니다.
+
+## 행동 가치 함수 Q^π(s, a)
+
+**행동 가치 함수(Action Value Function)** $Q^\pi(s, a)$는 상태 $s$에서 행동 $a$를 선택한 뒤, 이후 정책 $\pi$를 따를 때의 기대 누적 보상입니다:
+
+$$Q^\pi(s, a) = \mathbb{E}_\pi \left[ G_t \mid S_t = s, A_t = a \right]$$
+
+$V^\pi$와 $Q^\pi$의 관계는 다음과 같습니다:
+
+$$V^\pi(s) = \sum_{a \in \mathcal{A}} \pi(a \mid s) \cdot Q^\pi(s, a)$$
+
+즉, 상태 가치는 행동 가치의 정책 가중 평균입니다.
+
+## 벨만 기대 방정식 (Bellman Expectation Equation)
+
+가치 함수의 핵심 성질은 **재귀적(recursive)** 관계입니다. 이를 **벨만 기대 방정식** 이라 합니다:
+
+$$V^\pi(s) = \sum_a \pi(a \mid s) \sum_{s'} P(s' \mid s, a) \left[ R(s, a, s') + \gamma V^\pi(s') \right]$$
+
+$$Q^\pi(s, a) = \sum_{s'} P(s' \mid s, a) \left[ R(s, a, s') + \gamma \sum_{a'} \pi(a' \mid s') Q^\pi(s', a') \right]$$
+
+이 방정식은 "현재 상태의 가치 = 즉각 보상 + 다음 상태의 할인된 가치"임을 말합니다. 이 재귀 구조는 동적 프로그래밍(Dynamic Programming)을 통한 가치 계산의 기초입니다.
+
+## 벨만 최적 방정식 (Bellman Optimality Equation)
+
+최적 정책 $\pi^*$에 대응하는 **최적 가치 함수** $V^*(s)$와 $Q^*(s,a)$는:
+
+$$V^*(s) = \max_a \sum_{s'} P(s' \mid s, a) \left[ R(s, a, s') + \gamma V^*(s') \right]$$
+
+$$Q^*(s, a) = \sum_{s'} P(s' \mid s, a) \left[ R(s, a, s') + \gamma \max_{a'} Q^*(s', a') \right]$$
+
+최적 정책은 각 상태에서 $Q^*$ 값이 가장 높은 행동을 선택합니다:
+
+$$\pi^*(s) = \arg\max_a Q^*(s, a)$$
+
+**최적 정책의 존재성**: 유한 MDP에서는 항상 결정적인 최적 정책이 존재합니다(Sutton & Barto, 2018, Chapter 3). 이는 강화학습의 근본적인 이론적 보장입니다.
+
+## 가치 기반 vs 정책 기반 방법 비교
+
+| 특성 | 가치 기반 (Value-Based) | 정책 기반 (Policy-Based) |
+|------|------------------------|------------------------|
+| 대표 알고리즘 | Q-learning, DQN | REINFORCE, PPO |
+| 학습 대상 | $Q^*(s, a)$ 또는 $V^*(s)$ | $\pi_\theta(a \mid s)$ |
+| 정책 도출 | $\pi(s) = \arg\max_a Q(s, a)$ | 직접 출력 |
+| 행동 공간 | 이산 공간에 적합 | 연속/이산 모두 가능 |
+| 수렴 안정성 | 함수 근사 시 불안정 가능 | 상대적으로 안정적 |
+| 분산 | 낮음 | 높음 |
+| 편향 | 높음 (Q 추정 오차) | 낮음 |
+| LLM 적용 | 토큰 수준 Q값 추정 어려움 | 자연스러운 매핑 |
+
+LLM 정렬 분야에서는 행동 공간(전체 어휘, 수만 개의 토큰)이 매우 크기 때문에, $Q^*$를 직접 학습하는 가치 기반 방법보다 정책 기반 방법(PPO 등)이 주로 사용됩니다. DQN(Mnih et al., 2015)이 아타리 게임에서 성공한 것은 이산적이고 제한된 행동 공간 덕분이었습니다.
+
+## Actor-Critic: 두 세계의 결합
+
+**Actor-Critic** 방법은 가치 기반과 정책 기반의 장점을 결합합니다. Actor(정책)가 행동을 선택하고, Critic(가치 함수)이 그 행동의 품질을 평가하여 Actor의 학습을 돕습니다. 이 구조는 다음 장에서 다루는 PPO의 기반이 되며, RLHF에서 핵심 역할을 합니다.

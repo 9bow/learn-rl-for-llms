@@ -1,0 +1,120 @@
+---
+title: "PPO로 LLM 미세조정"
+description: "PPO-RLHF 실전 구현, 4개 모델 관리, 핵심 하이퍼파라미터, 롤아웃 생성과 업데이트 사이클을 학습합니다."
+sidebar:
+  order: 3
+learning_objectives:
+  - "PPO-RLHF의 전체 학습 루프(롤아웃 → 보상 계산 → PPO 업데이트)를 단계별로 설명할 수 있다"
+  - "4개 모델(Actor, Critic, Reward, Reference)의 역할과 메모리 요구사항을 이해한다"
+  - "핵심 하이퍼파라미터(lr, clip ε, KL β, batch size)의 역할과 권장 범위를 설명할 수 있다"
+estimated_minutes: 40
+references:
+  - title: "Training language models to follow instructions with human feedback"
+    authors: "Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al."
+    year: 2022
+    url: "https://arxiv.org/abs/2203.02155"
+  - title: "Secrets of RLHF in Large Language Models Part I: PPO"
+    authors: "Hu, S., Zhu, Y., Zhang, W., Zhang, Y., et al."
+    year: 2023
+    url: "https://arxiv.org/abs/2307.04964"
+  - title: "TRL: Transformer Reinforcement Learning"
+    authors: "von Werra, L., Belkada, Y., Tunstall, L., Beeching, E., et al."
+    year: 2020
+    url: "https://github.com/huggingface/trl"
+---
+
+## PPO-RLHF 학습 루프 개요
+
+PPO-RLHF는 다음 세 단계의 반복 루프로 구성됩니다:
+
+1. **롤아웃(Rollout) 생성**: Actor 정책으로 응답 샘플링
+2. **보상 계산(Reward Computation)**: 보상 모델과 KL 페널티로 토큰별 보상 계산
+3. **PPO 업데이트(PPO Update)**: Advantage 추정 후 Actor와 Critic 업데이트
+
+이 루프는 수천~수만 번 반복되며, 각 반복을 **PPO 이터레이션(iteration)** 이라 합니다.
+
+## 4개 모델의 역할
+
+PPO-RLHF는 동시에 4개의 모델을 유지합니다:
+
+| 모델 | 역할 | 학습 여부 | 초기화 |
+|------|------|----------|--------|
+| **Actor** $\pi_\theta$ | 응답 생성, 정책 업데이트 대상 | 학습 | SFT 모델 |
+| **Critic** $V_\phi$ | 상태 가치 추정, Advantage 계산용 | 학습 | 보상 모델 또는 SFT |
+| **Reward Model** $r_\psi$ | 응답 품질 점수 부여 | 고정 | RM 학습 결과 |
+| **Reference** $\pi_{ref}$ | KL 페널티 계산용 기준점 | 고정 | SFT 모델 |
+
+모든 모델이 동일한 크기의 LLM이라면, 70B 파라미터 기준으로 각 모델이 bf16으로 약 140GB를 차지하여 전체 약 560GB의 GPU 메모리가 필요합니다. 실제로는 Critic을 LoRA로 학습하거나, Reference와 Reward를 CPU 오프로딩하는 등의 최적화를 적용합니다.
+
+## 단계 1: 롤아웃 생성
+
+프롬프트 배치 $\{x_i\}_{i=1}^{B}$를 샘플링한 후, Actor 정책으로 응답을 생성합니다:
+
+$$y_i \sim \pi_\theta(\cdot \mid x_i), \quad i = 1, \ldots, B$$
+
+이때 각 토큰의 로그 확률 $\log \pi_\theta(y_{i,t} \mid x_i, y_{i,<t})$를 저장합니다 (이후 PPO 비율 계산에 사용). 동시에 Reference 모델의 로그 확률도 계산하여 저장합니다.
+
+**실용적 고려사항:**
+- 온도(temperature) $\tau \in [0.7, 1.0]$으로 샘플링하여 다양성 확보
+- 최소/최대 길이 제약으로 매우 짧거나 긴 응답 방지
+- 여러 응답을 동일 프롬프트에서 샘플링하면 분산 감소 (Group 기반 PPO)
+
+## 단계 2: 보상 계산
+
+각 토큰 위치 $t$에서의 보상을 계산합니다:
+
+$$r_t = \begin{cases}
+r_\psi(x_i, y_i) - \beta \log \frac{\pi_\theta(y_{i,T} \mid x_i, y_{i,<T})}{\pi_{ref}(y_{i,T} \mid x_i, y_{i,<T})} & t = T \text{ (마지막 토큰)} \\
+-\beta \log \frac{\pi_\theta(y_{i,t} \mid x_i, y_{i,<t})}{\pi_{ref}(y_{i,t} \mid x_i, y_{i,<t})} & t < T
+\end{cases}$$
+
+그 다음 GAE(Generalized Advantage Estimation)로 Advantage를 추정합니다:
+
+$$\hat{A}_t = \sum_{l=0}^{T-t} (\gamma \lambda)^l \delta_{t+l}, \quad \delta_t = r_t + \gamma V_\phi(s_{t+1}) - V_\phi(s_t)$$
+
+## 단계 3: PPO 업데이트
+
+롤아웃 데이터 $\{(s_t, a_t, \hat{A}_t, V_t^{target})\}$로 여러 에포크에 걸쳐 미니배치 업데이트를 수행합니다.
+
+**Actor 손실** (PPO-Clip):
+
+$$L^{Actor}(\theta) = -\mathbb{E}_t \left[ \min\left( r_t(\theta) \hat{A}_t,\ \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon) \hat{A}_t \right) \right]$$
+
+여기서 $r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{old}}(a_t \mid s_t)}$는 현재 정책과 롤아웃 당시 정책의 비율입니다.
+
+**Critic 손실** (가치 함수 학습):
+
+$$L^{Critic}(\phi) = \mathbb{E}_t \left[ \left( V_\phi(s_t) - V_t^{target} \right)^2 \right]$$
+
+$V_t^{target} = \hat{A}_t + V_\phi(s_t)$로 계산합니다.
+
+## 핵심 하이퍼파라미터
+
+| 하이퍼파라미터 | 기호 | 권장 범위 | 역할 |
+|--------------|------|----------|------|
+| Actor 학습률 | $\eta_{actor}$ | $10^{-6} \sim 10^{-5}$ | 정책 업데이트 보폭 |
+| Critic 학습률 | $\eta_{critic}$ | $10^{-5} \sim 10^{-4}$ | 가치 함수 학습 속도 |
+| PPO 클립 | $\epsilon$ | $0.1 \sim 0.2$ | 정책 변화 제한 |
+| KL 계수 | $\beta$ | $0.1 \sim 0.5$ | 레퍼런스 모델 유지 |
+| GAE $\lambda$ | $\lambda$ | $0.9 \sim 0.99$ | 편향-분산 트레이드오프 |
+| 할인 인자 | $\gamma$ | $0.99 \sim 1.0$ | 미래 보상 가중치 |
+| PPO 에포크 수 | $K$ | $1 \sim 4$ | 데이터 재사용 횟수 |
+| 롤아웃 배치 크기 | $B$ | $64 \sim 512$ | 롤아웃 다양성 |
+
+Hu et al. (2023)은 PPO 에포크 수 $K$가 너무 크면 (>4) 동일 데이터를 과도하게 재사용하여 on-policy 특성이 훼손되고 학습이 불안정해짐을 보고했습니다.
+
+## 구현 팁: TRL 라이브러리
+
+Hugging Face의 TRL(Transformer Reinforcement Learning) 라이브러리는 PPO-RLHF의 표준 구현을 제공합니다. 핵심 클래스는 `PPOTrainer`이며, 위의 3단계 루프를 자동으로 처리합니다.
+
+**주요 안정화 기법 (Hu et al., 2023 기반):**
+
+1. **Critic 초기화**: 보상 모델 가중치로 초기화하면 초기 Advantage 추정의 정확도가 높아짐
+2. **보상 클리핑**: 극단적 보상값을 $[-5, 5]$ 등으로 클리핑하여 Advantage 폭발 방지
+3. **Value Function 클리핑**: Critic 업데이트도 PPO 방식으로 클리핑 적용 가능
+4. **적응형 KL**: 목표 KL 발산을 설정하고 $\beta$를 동적으로 조정 (OpenAI 방식)
+
+적응형 KL 제어:
+$$\beta \leftarrow \begin{cases} \beta / 2 & \text{if } D_{KL} < D_{KL}^{target} / 1.5 \\ \beta \times 2 & \text{if } D_{KL} > D_{KL}^{target} \times 1.5 \\ \beta & \text{otherwise} \end{cases}$$
+
+이 메커니즘은 KL 발산을 목표 범위 안에 자동으로 유지하여, $\beta$를 수동으로 튜닝하는 부담을 줄여줍니다.

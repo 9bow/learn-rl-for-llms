@@ -1,0 +1,108 @@
+---
+title: "LLM을 RL 에이전트로 보기"
+description: "LLM의 텍스트 생성을 MDP로 매핑하고, 토큰 수준 vs 문장 수준 RL, Bandit 설정을 비교합니다."
+sidebar:
+  order: 2
+learning_objectives:
+  - "LLM의 텍스트 생성 과정을 MDP의 5가지 요소(S, A, P, R, γ)로 매핑할 수 있다"
+  - "토큰 수준 RL과 문장 수준 RL의 차이점과 각각의 장단점을 설명할 수 있다"
+  - "Bandit 설정과 전체 MDP 설정의 차이를 이해하고 각각의 적합한 상황을 구분할 수 있다"
+estimated_minutes: 25
+references:
+  - title: "Training language models to follow instructions with human feedback"
+    authors: "Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al."
+    year: 2022
+    url: "https://arxiv.org/abs/2203.02155"
+  - title: "Reinforcement Learning for Language Models"
+    authors: "Carta, T., Romac, C., Wolf, T., Lamprier, S., Sigaud, O., & Oudeyer, P. Y."
+    year: 2023
+    url: "https://arxiv.org/abs/2307.07171"
+  - title: "Fine-Tuning Language Models from Human Preferences"
+    authors: "Ziegler, D. M., Stiennon, N., Wu, J., Brown, T. B., Radford, A., et al."
+    year: 2019
+    url: "https://arxiv.org/abs/1909.08593"
+---
+
+## LLM 텍스트 생성의 MDP 매핑
+
+LLM의 텍스트 생성 과정은 자연스럽게 마르코프 결정 과정(MDP)으로 해석될 수 있습니다. 각 구성 요소를 대응시키면:
+
+| MDP 요소 | LLM 매핑 | 설명 |
+|----------|----------|------|
+| 상태 $s_t$ | 프롬프트 + 생성된 토큰 시퀀스 | $s_t = (x, y_1, y_2, \ldots, y_t)$ |
+| 행동 $a_t$ | 다음 토큰 선택 | 어휘 집합 $\mathcal{V}$에서 하나 선택 |
+| 정책 $\pi_\theta$ | LLM의 확률 분포 | $\pi_\theta(a_t \mid s_t) = P_\theta(y_{t+1} \mid x, y_{1:t})$ |
+| 전이 $P$ | 결정적 전이 | $s_{t+1} = (s_t, a_t)$, 선택한 토큰을 시퀀스에 추가 |
+| 보상 $r_t$ | 문장/토큰 수준 점수 | 설정에 따라 다름 (아래 상세 설명) |
+
+이 매핑에서 중요한 특성은 전이 함수가 **결정적(deterministic)** 이라는 점입니다. 행동(토큰)이 결정되면 다음 상태는 유일하게 정해집니다. 따라서 LLM RL의 확률성은 오직 정책(토큰 샘플링)에서 비롯됩니다.
+
+## 행동 공간의 특수성
+
+LLM의 행동 공간은 **어휘 크기** $|\mathcal{V}|$에 해당합니다. GPT-4의 경우 약 100,000개, LLaMA 계열은 약 32,000~128,000개 토큰입니다. 이는 전통적인 RL 문제(아타리 게임 18개 행동, 로봇 제어 수십 차원)와 비교하여 압도적으로 큰 이산 행동 공간입니다.
+
+이 특수성은 다음과 같은 함의를 가집니다:
+
+- Q-learning처럼 $\arg\max_a Q(s,a)$를 계산하기 비현실적
+- 정책을 softmax 확률 분포로 표현하는 것이 자연스러움
+- 탐색(exploration)이 어려움: 무작위 토큰 선택은 의미 없는 텍스트를 생성
+
+## 에피소드 구조
+
+LLM 텍스트 생성은 에피소드 과제입니다. 각 에피소드는:
+
+1. **시작**: 프롬프트 $x$가 주어짐, $s_0 = x$
+2. **진행**: 토큰 $y_1, y_2, \ldots, y_T$를 순차적으로 생성
+3. **종료**: EOS(End-of-Sequence) 토큰 생성 또는 최대 길이 도달
+
+에피소드 길이 $T$는 수십에서 수천 토큰까지 다양하며, 이는 신용 할당 문제를 어렵게 만드는 주요 요인입니다.
+
+## 토큰 수준 vs 문장 수준 RL
+
+보상을 언제, 어떻게 부여하느냐에 따라 RL 설정이 크게 달라집니다:
+
+| 특성 | 토큰 수준 (Token-level) | 문장 수준 (Sentence-level) |
+|------|------------------------|--------------------------|
+| 보상 시점 | 매 토큰 생성 시 | 완전한 응답 완성 후 |
+| 보상 예시 | KL 페널티 $-\beta \log \frac{\pi}{\pi_{ref}}$ | 보상 모델 점수 $r_\phi(x, y)$ |
+| 신용 할당 | 명확 (각 토큰의 기여 구분) | 어려움 (희소 보상) |
+| 구현 복잡도 | 높음 | 낮음 |
+| 분산 | 낮음 | 높음 |
+| LLM 적합성 | 부분적 (KL 항에만 적용) | 주류 RLHF 방식 |
+
+실제 RLHF 구현(InstructGPT, Ziegler et al. 2019)에서는 **혼합 방식** 을 사용합니다:
+- 토큰 수준: KL 페널티를 매 토큰에 적용
+- 문장 수준: 보상 모델 점수를 마지막 토큰에 부여
+
+$$r_t = \begin{cases} r_\phi(x, y) - \beta \log \frac{\pi_\theta(y_t \mid s_t)}{\pi_{ref}(y_t \mid s_t)} & t = T \text{ (마지막 토큰)} \\ -\beta \log \frac{\pi_\theta(y_t \mid s_t)}{\pi_{ref}(y_t \mid s_t)} & t < T \end{cases}$$
+
+## Bandit 설정 vs 전체 MDP 설정
+
+**Bandit 설정(Contextual Bandit)** 은 MDP의 단순화 버전으로, 상태 전이 없이 단일 행동에 즉각 보상이 주어집니다. LLM 맥락에서는 전체 응답을 하나의 "행동"으로 간주하는 경우에 해당합니다:
+
+- 입력: 프롬프트 $x$ (컨텍스트)
+- 행동: 완성된 응답 $y$ (단일 행동)
+- 보상: $r(x, y)$ (즉각 보상)
+
+**전체 MDP 설정** 은 각 토큰 생성을 독립적인 행동으로 간주하며, 상태가 누적됩니다.
+
+| 특성 | Bandit 설정 | 전체 MDP |
+|------|------------|---------|
+| 행동 단위 | 완성된 응답 | 개별 토큰 |
+| 적합 알고리즘 | DPO, REINFORCE | PPO, A3C |
+| 신용 할당 | 불필요 | 필수 |
+| 구현 복잡도 | 낮음 | 높음 |
+| 대표 연구 | DPO (Rafailov et al. 2023) | RLHF (Ouyang et al. 2022) |
+
+Bandit 설정은 구현이 단순하고 안정적이며, DPO(Direct Preference Optimization) 같은 알고리즘의 이론적 기반이 됩니다. 반면 전체 MDP는 중간 단계 피드백이 가능하고 세밀한 최적화가 가능하지만, 구현이 복잡하고 불안정할 수 있습니다.
+
+## 실용적 함의
+
+LLM을 RL 에이전트로 보는 관점은 다음과 같은 실용적 설계 결정을 이끕니다:
+
+1. **레퍼런스 모델 유지**: 정책이 너무 크게 변하지 않도록 KL 제약 적용
+2. **롤아웃 배치**: 동일 프롬프트에서 여러 응답을 샘플링하여 분산 감소
+3. **보상 정규화**: 에피소드 길이에 따른 보상 스케일 조정
+4. **탐색-활용 균형**: 온도(temperature) 파라미터로 탐색 조절
+
+이러한 설계 결정들은 섹션 03(RLHF)에서 구체적인 구현 형태로 나타납니다.

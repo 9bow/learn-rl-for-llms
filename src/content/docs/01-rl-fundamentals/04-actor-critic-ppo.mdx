@@ -1,0 +1,106 @@
+---
+title: "Actor-Critic과 PPO"
+description: "Actor-Critic 구조, TRPO의 신뢰 영역 개념, PPO-Clip 목적함수와 실용적 장점을 학습합니다."
+sidebar:
+  order: 4
+learning_objectives:
+  - "Actor-Critic 아키텍처에서 Actor와 Critic의 역할 분담을 설명할 수 있다"
+  - "TRPO의 신뢰 영역(trust region) 개념과 한계를 이해한다"
+  - "PPO-Clip 목적함수를 수식으로 설명하고 클리핑이 안정성에 기여하는 방식을 논할 수 있다"
+estimated_minutes: 40
+references:
+  - title: "Proximal Policy Optimization Algorithms"
+    authors: "Schulman, J., Wolski, F., Dhariwal, P., Radford, A., & Klimov, O."
+    year: 2017
+    url: "https://arxiv.org/abs/1707.06347"
+  - title: "Trust Region Policy Optimization"
+    authors: "Schulman, J., Levine, S., Abbeel, P., Jordan, M., & Moritz, P."
+    year: 2015
+    url: "https://arxiv.org/abs/1502.05477"
+  - title: "High-Dimensional Continuous Control Using Generalized Advantage Estimation"
+    authors: "Schulman, J., Moritz, P., Levine, S., Jordan, M., & Abbeel, P."
+    year: 2016
+    url: "https://arxiv.org/abs/1506.02438"
+---
+
+## Actor-Critic 구조
+
+**Actor-Critic** 은 정책 기반(Actor)과 가치 기반(Critic)의 장점을 결합한 아키텍처입니다.
+
+- **Actor** $\pi_\theta(a \mid s)$: 행동을 선택하는 정책 네트워크. 정책 경사법으로 업데이트
+- **Critic** $V_\phi(s)$ 또는 $Q_\phi(s,a)$: 현재 정책의 가치를 추정하는 네트워크. TD 오차(temporal difference error)로 업데이트
+
+Actor-Critic의 핵심은 Critic이 REINFORCE의 Monte Carlo 반환 $G_t$ 대신 **저분산 어드밴티지 추정치** 를 제공한다는 점입니다:
+
+$$A^\pi(s, a) = Q^\pi(s, a) - V^\pi(s)$$
+
+실제로는 $Q^\pi$를 직접 추정하지 않고, TD 타겟을 이용합니다:
+
+$$A_t \approx r_t + \gamma V_\phi(s_{t+1}) - V_\phi(s_t)$$
+
+이를 **TD 어드밴티지(TD Advantage)** 또는 **1-step 어드밴티지** 라 합니다.
+
+## 일반화 어드밴티지 추정 (GAE)
+
+Schulman et al. (2016)이 제안한 **GAE(Generalized Advantage Estimation)** 는 편향-분산 트레이드오프를 $\lambda$ 파라미터로 조절합니다:
+
+$$\hat{A}_t^{GAE(\gamma, \lambda)} = \sum_{l=0}^{\infty} (\gamma \lambda)^l \delta_{t+l}$$
+
+여기서 $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$는 TD 잔차입니다. $\lambda = 0$이면 1-step TD(낮은 분산, 높은 편향), $\lambda = 1$이면 Monte Carlo(높은 분산, 낮은 편향)에 해당합니다. 실제로는 $\lambda \in [0.9, 0.99]$가 자주 사용됩니다.
+
+## TRPO: 신뢰 영역 정책 최적화
+
+일반적인 경사 상승법으로 정책을 업데이트할 때, 업데이트 보폭이 너무 크면 정책이 갑자기 나빠질 수 있습니다. 이를 해결하기 위해 Schulman et al. (2015)은 **TRPO(Trust Region Policy Optimization)** 를 제안했습니다.
+
+TRPO의 핵심 아이디어는 정책 업데이트 시 새 정책 $\pi_{\theta'}$과 구 정책 $\pi_\theta$ 사이의 KL 발산을 제약 조건으로 두는 것입니다:
+
+$$\max_{\theta'} \mathbb{E}_{s,a \sim \pi_\theta} \left[ \frac{\pi_{\theta'}(a \mid s)}{\pi_\theta(a \mid s)} \hat{A}_t \right]$$
+
+$$\text{subject to } \mathbb{E}_s \left[ D_{KL}(\pi_\theta(\cdot \mid s) \| \pi_{\theta'}(\cdot \mid s)) \right] \leq \delta$$
+
+TRPO는 이론적으로 단조 개선(monotonic improvement)을 보장하지만, **2차 최적화(second-order optimization)** 가 필요하여 계산 비용이 매우 높고 구현이 복잡합니다.
+
+## PPO: 근위 정책 최적화
+
+Schulman et al. (2017)의 **PPO(Proximal Policy Optimization)** 는 TRPO의 아이디어를 유지하면서 1차 최적화만으로 구현 가능한 실용적 알고리즘입니다.
+
+**확률비(Probability Ratio)** 를 정의합니다:
+
+$$r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{old}}(a_t \mid s_t)}$$
+
+$r_t(\theta) = 1$이면 정책이 변하지 않았고, $r_t > 1$이면 해당 행동이 더 자주 선택되도록, $r_t < 1$이면 덜 선택되도록 업데이트된 것입니다.
+
+**PPO-Clip 목적함수** 는 다음과 같습니다:
+
+$$L^{CLIP}(\theta) = \mathbb{E}_t \left[ \min\left( r_t(\theta) \hat{A}_t,\ \text{clip}(r_t(\theta),\ 1 - \epsilon,\ 1 + \epsilon) \hat{A}_t \right) \right]$$
+
+클리핑 메커니즘의 작동 원리:
+
+| 상황 | $\hat{A}_t > 0$ (좋은 행동) | $\hat{A}_t < 0$ (나쁜 행동) |
+|------|---------------------------|---------------------------|
+| $r_t > 1 + \epsilon$ | 클리핑으로 과도한 증가 억제 | 하한 없음 (빠른 감소 허용) |
+| $r_t < 1 - \epsilon$ | 상한 없음 (빠른 증가 허용) | 클리핑으로 과도한 감소 억제 |
+
+$\min$ 연산은 낙관적 업데이트를 방지하는 **보수적 보장(conservative bound)** 역할을 합니다.
+
+## PPO의 전체 손실함수
+
+실제 구현에서 PPO의 전체 손실함수는 세 항을 결합합니다:
+
+$$L(\theta) = L^{CLIP}(\theta) - c_1 L^{VF}(\theta) + c_2 S[\pi_\theta]$$
+
+- $L^{VF}(\theta) = (V_\theta(s_t) - V_t^{target})^2$: Critic의 가치 추정 손실
+- $S[\pi_\theta] = -\mathbb{E}[\log \pi_\theta(a \mid s)]$: 엔트로피 보너스 (탐색 유도)
+- $c_1, c_2$: 각 항의 가중치 하이퍼파라미터
+
+## PPO가 널리 쓰이는 이유
+
+PPO는 RLHF를 포함한 LLM 정렬에서 사실상의 표준 알고리즘으로 자리잡았습니다. 그 이유는 다음과 같습니다:
+
+1. **구현 단순성**: 1차 최적화만 필요하며, 기존 딥러닝 프레임워크로 손쉽게 구현 가능
+2. **샘플 효율성**: 여러 에포크에 걸쳐 동일한 데이터 재사용 가능 (off-policy 특성 부분 활용)
+3. **안정성**: 클리핑이 정책의 급격한 변화를 방지
+4. **범용성**: 연속/이산 행동 공간 모두 적용 가능
+5. **실증적 성능**: Schulman et al. (2017)이 다양한 벤치마크에서 TRPO 대비 동등하거나 우월한 성능 입증
+
+OpenAI의 InstructGPT, Anthropic의 Claude, DeepMind의 Sparrow 등 주요 RLHF 시스템이 모두 PPO를 핵심 알고리즘으로 사용했습니다. 이는 PPO의 안정성과 구현 용이성이 대규모 LLM 훈련 환경에서 특히 중요하기 때문입니다.

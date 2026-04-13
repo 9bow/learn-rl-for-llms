@@ -1,0 +1,171 @@
+---
+title: "분산 학습과 최적화"
+description: "RLHF의 계산 병목을 분석하고 비동기 롤아웃, 텐서/파이프라인 병렬화 등 분산 학습 전략을 학습합니다."
+sidebar:
+  order: 2
+learning_objectives:
+  - "RLHF 훈련에서 샘플 생성이 전체 계산의 80%를 차지하는 이유를 설명할 수 있다"
+  - "텐서 병렬, 파이프라인 병렬, 데이터 병렬의 차이를 RLHF 맥락에서 비교할 수 있다"
+  - "HybridFlow의 제어-계산 분리 아키텍처의 장점을 이해한다"
+estimated_minutes: 35
+references:
+  - title: "veRL: Volcano Engine Reinforcement Learning for LLMs"
+    url: "https://github.com/volcengine/verl"
+  - title: "Asymmetric PPO for Large Language Models"
+    url: "https://arxiv.org/abs/2510.01656"
+  - title: "vLLM: Easy, Fast, and Cheap LLM Serving with PagedAttention"
+    url: "https://arxiv.org/abs/2309.06180"
+---
+
+## RLHF의 계산 병목
+
+표준 PPO 기반 RLHF 훈련은 다음 네 단계를 반복합니다:
+
+1. **롤아웃(Rollout)**: Actor 모델이 프롬프트에 대한 응답을 자기회귀적으로 생성
+2. **보상 계산(Reward)**: Reward Model이 생성된 응답에 점수를 부여
+3. **어드밴티지 추정(Advantage)**: Critic이 가치를 추정하고 GAE로 어드밴티지 계산
+4. **정책 업데이트(Update)**: PPO 목적 함수로 Actor와 Critic을 동시에 업데이트
+
+이 중 **롤아웃 단계가 전체 훈련 시간의 약 80%** 를 차지합니다. 그 이유는 언어 모델의 자기회귀 생성이 본질적으로 순차적이기 때문입니다. 토큰 $t$를 생성하기 위해서는 $1, 2, \ldots, t-1$의 모든 토큰이 먼저 생성되어야 하며, 이 과정에서 GPU의 병렬 연산 능력이 충분히 활용되지 못합니다.
+
+## 비동기 롤아웃 분리 전략
+
+이 병목을 해결하는 핵심 전략은 **롤아웃과 업데이트를 비동기로 분리** 하는 것입니다.
+
+### 동기 방식 (기존)
+
+```
+[롤아웃] → [보상] → [업데이트] → [롤아웃] → [보상] → [업데이트] → ...
+```
+
+모든 단계가 완료될 때까지 다음 단계가 대기합니다. GPU 활용률이 낮습니다.
+
+### 비동기 방식
+
+```
+롤아웃 Worker: [rollout_1] [rollout_2] [rollout_3] ...
+업데이트 Worker:            [update_1]  [update_2]  ...
+```
+
+롤아웃과 업데이트를 별도 GPU 그룹에서 동시에 실행합니다. 롤아웃 워커가 새로운 샘플을 생성하는 동안, 업데이트 워커는 이전 배치로 모델을 업데이트합니다.
+
+**주의점**: 비동기 방식은 '오래된(stale)' 데이터 문제를 일으킬 수 있습니다. 업데이트된 정책과 샘플을 생성한 정책 사이의 차이가 커지면 학습이 불안정해집니다. 이를 제어하기 위해 중요도 샘플링(importance sampling) 비율을 모니터링하고, 오래된 샘플의 비율을 제한하는 전략이 사용됩니다.
+
+## 가중치 동기화 최적화
+
+비동기 파이프라인에서 Actor 모델이 업데이트되면, 롤아웃 엔진(vLLM 등)에 새로운 가중치를 전달해야 합니다. 이 **가중치 동기화** 과정도 성능에 영향을 미칩니다.
+
+최적화 전략:
+- **분산 체크포인팅**: 가중치를 직접 메모리에서 전달 (디스크 I/O 회피)
+- **선택적 동기화**: 레이어 단위로 점진적 동기화하여 동기화 지연을 줄임
+- **더블 버퍼링**: 이전 가중치로 롤아웃하는 동안 새 가중치를 백그라운드에서 로드
+
+## HybridFlow: 제어-계산 분리 아키텍처
+
+veRL의 **HybridFlow** 아키텍처는 RLHF 워크플로우의 두 측면을 명확하게 분리합니다.
+
+### 제어 흐름 (Single-Controller)
+
+전체 RLHF 알고리즘의 로직을 단일 프로세스에서 조율합니다:
+
+```python
+# HybridFlow에서의 PPO (개념적 표현)
+for step in range(max_steps):
+    # 1. 롤아웃
+    experiences = actor.generate(prompts)
+    
+    # 2. 보상 및 가치 계산
+    rewards = reward_model.score(experiences)
+    values = critic.estimate(experiences)
+    
+    # 3. 어드밴티지 계산 (로컬)
+    advantages = compute_gae(rewards, values)
+    
+    # 4. 업데이트
+    actor.update(experiences, advantages)
+    critic.update(experiences, advantages)
+```
+
+이 코드는 단 수십 줄로 PPO 전체를 표현합니다. 알고리즘 변경이 매우 쉽습니다.
+
+### 계산 흐름 (Multi-Controller)
+
+각 모델 내부의 분산 계산은 완전히 최적화된 multi-controller 방식으로 실행됩니다. Megatron-LM의 텐서/파이프라인 병렬화, FSDP의 샤딩 등이 내부에서 투명하게 동작합니다.
+
+**핵심 이점**: 연구자는 알고리즘 로직(single-controller)에만 집중하면 되고, 분산 최적화(multi-controller)는 프레임워크가 처리합니다.
+
+## RLHF에서의 병렬화 전략
+
+### 텐서 병렬 (Tensor Parallelism, TP)
+
+단일 레이어의 행렬 연산을 여러 GPU에 분할합니다. 예를 들어 어텐션 헤드를 GPU 수만큼 나눕니다.
+
+- **장점**: 통신 오버헤드가 낮고, 대형 레이어의 메모리를 분산
+- **RLHF 적용**: Actor, Critic 모두에 적용 가능. AutoTP(OpenRLHF)가 자동으로 처리
+
+### 파이프라인 병렬 (Pipeline Parallelism, PP)
+
+모델의 레이어 그룹을 여러 GPU에 순서대로 배치합니다.
+
+- **장점**: 매우 깊은 모델을 학습할 때 메모리 효율적
+- **RLHF 적용**: 671B 규모 모델(veRL + Megatron)에서 필수적. 단, 마이크로 배치 파이프라이닝이 필요
+
+### 데이터 병렬 (Data Parallelism, DP)
+
+동일한 모델 복사본을 여러 GPU에 두고, 각 GPU가 다른 배치를 처리합니다.
+
+- **장점**: 구현이 간단하고 처리량 선형 확장
+- **RLHF 적용**: Critic 모델에 주로 사용. FSDP를 활용하면 메모리 효율성 향상
+
+### RLHF에서의 복합 전략
+
+대규모 RLHF에서는 세 가지 병렬화를 조합합니다:
+
+| 모델 | 권장 병렬화 | 이유 |
+|------|------------|------|
+| Actor (70B+) | TP + PP | 메모리 분산 필수 |
+| Critic (70B+) | TP + DP | 빠른 가치 추정 필요 |
+| Reward Model (7B-13B) | DP | 작은 크기, 처리량이 중요 |
+| Reference Model (고정) | TP | 추론만 하므로 단순 분산 |
+
+## vLLM을 활용한 고속 추론
+
+vLLM은 **PagedAttention** 알고리즘을 통해 KV 캐시를 효율적으로 관리하여 표준 추론 대비 최대 24배 처리량을 달성합니다.
+
+RLHF 롤아웃에서 vLLM 사용 시 이점:
+- 동일 GPU 메모리로 더 많은 동시 시퀀스 처리
+- 연속 배치(continuous batching)로 GPU 활용률 극대화
+- 투기적 디코딩(speculative decoding)과의 조합으로 추가 속도 향상
+
+## Asymmetric PPO와 Mini-Critics
+
+### Asymmetric PPO (arXiv:2510.01656)
+
+Actor와 Critic이 반드시 같은 크기일 필요가 없다는 관찰에서 출발합니다. **Asymmetric PPO** 는 큰 Actor(예: 70B)와 작은 Critic(예: 7B)을 조합합니다.
+
+$$L_{actor} = \text{PPO-Clip}(\theta_{actor})$$
+$$L_{critic} = \text{MSE}(\phi_{critic}^{small})$$
+
+이 비대칭 설계의 이점:
+- Critic 학습에 필요한 GPU 메모리 대폭 감소
+- Critic의 빠른 업데이트로 Actor 학습을 더 잘 지원
+- 전체 시스템 처리량 향상
+
+### Mini-Critics
+
+Asymmetric PPO의 극단적 형태로, **매우 작은 Critic(mini-critic)** 을 사용합니다. 예를 들어, 별도의 큰 Critic 대신 Actor 위에 얇은 선형 레이어만 추가하여 가치를 추정합니다.
+
+$$V(s) = \mathbf{w}^T h_{actor}(s) + b$$
+
+여기서 $h_{actor}(s)$는 Actor의 은닉 상태입니다. 이 접근법은 추가 메모리 없이 가치 추정이 가능하지만, 가치 추정 품질이 떨어질 수 있습니다.
+
+## 실전 최적화 체크리스트
+
+대규모 RLHF 훈련 시 고려해야 할 최적화 항목:
+
+1. **롤아웃 분리**: 롤아웃 전용 GPU 그룹과 학습 전용 GPU 그룹을 분리
+2. **vLLM 통합**: 롤아웃 단계에서 vLLM의 연속 배치 활성화
+3. **Flash Attention 2**: 어텐션 계산의 메모리와 속도 최적화
+4. **그래디언트 체크포인팅**: 메모리와 계산의 트레이드오프 조정
+5. **혼합 정밀도(BF16)**: 메모리 절반으로 줄이면서 학습 안정성 유지
+6. **최적 배치 크기**: 롤아웃 배치와 업데이트 미니배치를 별도로 조정

@@ -1,0 +1,96 @@
+---
+title: "보상 모델 학습"
+description: "Bradley-Terry 모델, 선호 데이터 수집, 보상 모델 아키텍처, Over-optimization 문제를 학습합니다."
+sidebar:
+  order: 2
+learning_objectives:
+  - "Bradley-Terry 모델의 수학적 구조와 보상 모델 학습 목적함수를 유도할 수 있다"
+  - "선호 데이터 수집 방법과 주석 품질이 보상 모델에 미치는 영향을 설명할 수 있다"
+  - "보상 모델 Over-optimization 현상과 그 원인을 설명할 수 있다"
+estimated_minutes: 35
+references:
+  - title: "Training language models to follow instructions with human feedback"
+    authors: "Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al."
+    year: 2022
+    url: "https://arxiv.org/abs/2203.02155"
+  - title: "Reward Model Ensembles Help Mitigate Overoptimization"
+    authors: "Coste, T., Anwar, U., Kirk, R., & Krueger, D."
+    year: 2023
+    url: "https://arxiv.org/abs/2310.02743"
+  - title: "Scaling Laws for Reward Model Overoptimization"
+    authors: "Gao, L., Biderman, S., et al."
+    year: 2022
+    url: "https://arxiv.org/abs/2210.10760"
+---
+
+## 보상 모델의 역할
+
+RLHF에서 보상 모델(Reward Model, RM)은 인간 선호의 **대리자(proxy)** 입니다. 수천 명의 인간 주석자가 실시간으로 모델 응답을 평가하는 것은 불가능하므로, 사전에 수집한 선호 데이터로 인간 판단을 모방하는 신경망을 학습합니다.
+
+보상 모델은 프롬프트 $x$와 응답 $y$를 입력받아 해당 응답의 품질을 나타내는 스칼라 점수를 출력합니다:
+
+$$r_\phi: \mathcal{X} \times \mathcal{Y} \rightarrow \mathbb{R}$$
+
+## Bradley-Terry 모델
+
+선호 데이터에서 보상 모델을 학습하는 가장 널리 사용되는 이론적 틀은 **Bradley-Terry 모델(1952)** 입니다. 이 모델은 두 선택지 $y_1, y_2$ 중 $y_1$이 선호될 확률을 다음과 같이 정의합니다:
+
+$$P(y_1 \succ y_2 \mid x) = \sigma(r(x, y_1) - r(x, y_2)) = \frac{e^{r(x, y_1)}}{e^{r(x, y_1)} + e^{r(x, y_2)}}$$
+
+여기서 $\sigma$는 시그모이드 함수, $r(x, y)$는 응답 $y$의 절대적 품질 점수입니다. 이 모델은 선호가 두 응답의 품질 차이에 의해서만 결정된다고 가정합니다.
+
+**학습 목적함수**: 최대 가능도 추정(MLE)으로 유도됩니다:
+
+$$\mathcal{L}_{RM}(\phi) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \log \sigma\left(r_\phi(x, y_w) - r_\phi(x, y_l)\right) \right]$$
+
+여기서 $y_w$는 선호(preferred/winner) 응답, $y_l$은 비선호(less preferred/loser) 응답입니다. 이 손실함수는 보상 모델이 선호 응답에 더 높은 점수를 부여하도록 학습합니다.
+
+## 선호 데이터 수집
+
+선호 데이터는 동일 프롬프트에 대한 여러 응답을 주석자에게 보여주고 상대적 품질을 판단하게 하여 수집합니다.
+
+**수집 방법의 유형:**
+
+| 방법 | 설명 | 장점 | 단점 |
+|------|------|------|------|
+| 쌍별 비교(Pairwise) | 응답 A vs B 중 선호 선택 | 단순, 일관성 높음 | $O(n^2)$ 비교 필요 |
+| 순위 매기기(Ranking) | $k$개 응답 전체 순위 | 정보량 많음 | 주석자 부담 큼 |
+| 절대 평가(Likert) | 1~7점 절대 점수 | 직관적 | 주석자 간 기준 차이 |
+| 최선/최악 선택 | 가장 좋은/나쁜 응답 선택 | 효율적 | 중간 품질 정보 손실 |
+
+InstructGPT는 쌍별 비교와 순위 매기기를 조합하여 사용했습니다. 하나의 프롬프트에 대해 4~9개의 응답을 생성하고, 모든 쌍의 비교 정보를 추출하여 데이터 효율을 높였습니다.
+
+## 보상 모델 아키텍처
+
+**아키텍처**: SFT 모델과 동일한 트랜스포머 구조에 스칼라 출력을 위한 선형 레이어(linear head)를 추가합니다.
+
+$$r_\phi(x, y) = \text{Linear}(h_{[EOS]})$$
+
+여기서 $h_{[EOS]}$는 EOS 토큰 위치의 마지막 레이어 은닉 상태입니다. 전체 시퀀스 $(x, y)$를 인코딩한 후 하나의 스칼라로 집약합니다.
+
+**초기화**: 일반적으로 SFT 모델 가중치로 초기화합니다. 이는 (a) 학습 효율을 높이고, (b) 사전학습 언어 이해 능력을 보상 판단에 활용할 수 있게 합니다.
+
+**크기 선택**: 보상 모델은 일반적으로 정책 모델보다 같거나 작은 크기를 사용합니다. InstructGPT에서는 6B 보상 모델로 175B 정책을 학습했습니다.
+
+## 보상 모델 품질의 중요성
+
+보상 모델의 품질은 RLHF 전체 성능의 상한(upper bound)을 결정합니다. 불완전한 보상 모델은 다음과 같은 방식으로 최종 성능을 제한합니다:
+
+- **편향(Bias)**: 체계적으로 잘못된 선호를 학습하면, PPO가 그 편향 방향으로 최적화
+- **분산(Variance)**: 노이즈가 많은 보상 신호는 PPO 학습을 불안정하게 만듦
+- **분포 외 일반화 실패**: 학습 분포를 벗어난 응답에 대해 부정확한 점수 부여
+
+## Over-optimization 현상
+
+**보상 모델 over-optimization** 은 PPO가 보상 모델 점수를 과도하게 최적화하여 실제 인간 선호와 괴리되는 현상입니다. Gao et al. (2022)은 이를 KL 발산 함수로 정량화했습니다.
+
+핵심 발견: 보상 모델 점수는 초기에는 인간 선호와 일치하여 증가하지만, KL 발산이 일정 수준을 넘으면 보상 모델 점수는 계속 증가하는 반면 실제 인간 선호(골드 보상)는 감소합니다. 이 역전 지점은 일반적으로 KL $\approx$ 10~20 nats 부근에서 발생합니다.
+
+**완화 전략:**
+
+1. **KL 페널티**: $\beta D_{KL}(\pi_\theta \| \pi_{ref})$로 분포 이동 제한 (주류 방법)
+2. **보상 모델 앙상블**: Coste et al. (2023)은 여러 보상 모델의 최솟값(pessimistic aggregation)을 사용하면 over-optimization이 감소함을 보임
+3. **조기 중단(Early Stopping)**: 보상 모델 점수와 다른 지표를 모니터링하여 적절한 시점에 학습 종료
+4. **보상 모델 업데이트**: 학습 중 보상 모델을 주기적으로 재학습하여 분포 이동에 적응 (계산 비용 증가)
+
+보상 모델의 한계는 RLHF 연구의 가장 활발한 주제 중 하나이며, RLAIF와 Constitutional AI는 이 한계를 다른 방식으로 접근하는 시도입니다.

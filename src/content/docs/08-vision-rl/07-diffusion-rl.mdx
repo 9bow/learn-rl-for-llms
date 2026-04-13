@@ -1,0 +1,184 @@
+---
+title: "RL for Diffusion Models"
+description: "DDPO, DPOK, DPPO, D²PPO — 확산 모델에 강화학습을 적용하여 인간 선호와 이미지 품질을 최적화하는 기법들"
+sidebar:
+  order: 7
+learning_objectives:
+  - DDPO가 확산 과정을 MDP로 모델링하고 정책 경사법을 적용하는 방식을 설명할 수 있다
+  - DPOK의 KL 정규화와 DDPO의 차이점, 이미지-텍스트 정렬에서의 역할을 이해한다
+  - D²PPO의 분산 손실이 다양성 붕괴를 방지하는 원리를 분석할 수 있다
+estimated_minutes: 32
+references:
+  - title: "Training Diffusion Models with Reinforcement Learning"
+    url: "https://arxiv.org/abs/2305.13301"
+  - title: "DPOK: Reinforcement Learning for Fine-tuning Text-to-Image Diffusion Models"
+    url: "https://arxiv.org/abs/2305.16381"
+  - title: "DPPO: Diffusion Policy Policy Optimization"
+    url: "https://arxiv.org/abs/2409.00588"
+  - title: "Beyond Dirac Delta: Preventing Reward Collapse in Diffusion RL Fine-tuning"
+    url: "https://arxiv.org/abs/2601.12401"
+---
+
+## 확산 모델과 RL의 만남
+
+**확산 모델(diffusion model)** 은 현재 이미지, 오디오, 비디오 생성의 지배적인 패러다임입니다. DALL-E, Stable Diffusion, Midjourney 등이 모두 확산 모델 기반입니다. 그러나 확산 모델의 표준 훈련 방식(노이즈 예측 최소화)은 특정 목표를 직접 최적화하지 않는다.
+
+**인간 선호 최적화**, **이미지-텍스트 정렬 향상**, **특정 스타일 강화** 등의 목표를 달성하려면 RL이 필요합니다. RL은 임의의 미분 불가능한 보상 함수도 최적화할 수 있기 때문입니다.
+
+### 확산 과정의 MDP 모델링
+
+확산 모델의 역방향 과정(denoising process)을 MDP로 해석하면 RL 적용의 기반이 마련됩니다.
+
+- **상태** $s_t$: 시간 $t$ 에서의 노이즈가 있는 이미지 $x_t$
+- **행동** $a_t$: 디노이징 네트워크의 출력 $\epsilon_\theta(x_t, t)$
+- **전환** $p$: 확산 과정의 전환 확률 $p(x_{t-1} | x_t)$
+- **보상** $r$: 최종 생성 이미지 $x_0$ 에 대한 인간 선호 점수
+
+$$r(x_0) = \text{RewardModel}(x_0, \text{prompt})$$
+
+전체 에피소드는 $T$ 스텝의 디노이징 과정이며, 보상은 에피소드 마지막($t=0$)에만 주어진다.
+
+## DDPO: Denoising Diffusion Policy Optimization
+
+**DDPO** (Black et al., arXiv:2305.13301)는 확산 모델을 RL로 미세조정하는 최초의 체계적인 방법입니다.
+
+### 핵심 아이디어
+
+DDPO는 KL 정규화 없이 순수하게 보상을 최대화합니다. 정책 경사를 확산 과정의 각 디노이징 스텝에 적용합니다.
+
+$$\mathcal{L}_{DDPO} = -\mathbb{E}_{\tau \sim \pi_\theta}\left[\sum_{t=0}^{T} \log \pi_\theta(x_{t-1} | x_t) \cdot r(x_0)\right]$$
+
+IS(Importance Sampling)를 활용하여 오래된 샘플도 재활용합니다.
+
+$$\mathcal{L}_{IS} = -\mathbb{E}_{\tau \sim \pi_{old}}\left[\frac{\pi_\theta(x_{t-1} | x_t)}{\pi_{old}(x_{t-1} | x_t)} \cdot r(x_0)\right]$$
+
+### 보상 함수 예시
+
+DDPO는 다양한 보상 함수와 함께 사용됩니다.
+
+| 보상 함수 | 측정 대상 | 예시 |
+|---------|---------|------|
+| CLIP 점수 | 텍스트-이미지 정렬 | "beautiful sunset" |
+| 미적 점수 | 이미지 아름다움 | LAION 미적 분류기 |
+| 압축률 | 이미지 복잡도 | JPEG 압축 비율 |
+| 인간 선호 | 전반적 품질 | 쌍별 비교 모델 |
+
+### 성능 결과
+
+DDPO는 Stable Diffusion v1.4에 적용하여 CLIP 점수를 2.3점 향상시키고, 미적 점수를 0.4점 향상시켰다. 특히 "압축 가능한 이미지"(단순하고 명확한 구성) 목표에서 극적인 변화를 보여 RL의 목표 최적화 능력을 입증했다.
+
+## DPOK: KL 정규화 포함 미세조정
+
+**DPOK** (Fan et al., arXiv:2305.16381)는 DDPO와 달리 KL 정규화를 포함하여 기반 모델에서 너무 멀리 벗어나지 않도록 제약합니다.
+
+### KL 정규화의 중요성
+
+KL 정규화 없이 보상만 최대화하면 모드 붕괴(mode collapse)가 발생합니다. 모델이 보상 함수의 극단적인 지점에만 집중하여 다양성을 잃는다.
+
+$$\mathcal{L}_{DPOK} = -\mathbb{E}[r(x_0)] + \beta \cdot D_{KL}(\pi_\theta \| \pi_{ref})$$
+
+여기서 $\pi_{ref}$ 는 원래 사전훈련된 확산 모델입니다.
+
+### 이미지-텍스트 정렬과 품질의 동시 향상
+
+DPOK는 두 목표를 동시에 최적화합니다.
+
+$$r_{total} = \alpha \cdot \text{CLIP}(x_0, \text{prompt}) + (1-\alpha) \cdot \text{Quality}(x_0)$$
+
+| 방법 | CLIP 점수 | 미적 점수 | 다양성 |
+|------|---------|---------|------|
+| 기준 SD | 0.312 | 5.24 | 높음 |
+| DDPO | 0.341 | 5.67 | 낮음 |
+| **DPOK** | **0.339** | **5.71** | **중간** |
+
+DPOK는 DDPO와 비슷한 성능을 유지하면서도 더 높은 다양성을 보입니다.
+
+## DPPO: 2층 MDP 모델링
+
+**DPPO** (Ren et al., arXiv:2409.00588)는 확산 과정을 **2층 MDP** 로 모델링하여 더 정교한 PPO를 적용합니다.
+
+### 2층 MDP 구조
+
+**상위 MDP**: 프롬프트에서 이미지 생성의 전체 계획
+- 상태: 현재 생성 컨텍스트
+- 행동: 전체 디노이징 경로 선택
+
+**하위 MDP**: 각 디노이징 스텝의 세밀한 제어
+- 상태: 현재 노이즈 이미지 $x_t$
+- 행동: 디노이징 방향 $\epsilon_\theta(x_t, t)$
+
+$$\pi_{high}(\text{plan} | \text{prompt}) \cdot \prod_{t=T}^{0} \pi_{low}(x_{t-1} | x_t, \text{plan})$$
+
+### PPO 클리핑
+
+DPPO는 PPO의 클리핑 메커니즘을 확산 과정에 적용합니다.
+
+$$\mathcal{L}_{DPPO} = -\mathbb{E}\left[\min\left(r_t \cdot \hat{A}_t, \text{clip}(r_t, 1-\epsilon, 1+\epsilon) \cdot \hat{A}_t\right)\right]$$
+
+여기서 $r_t = \frac{\pi_\theta(x_{t-1}|x_t)}{\pi_{old}(x_{t-1}|x_t)}$ 는 중요도 비율입니다.
+
+## D²PPO: 다양성 붕괴 방지
+
+**D²PPO** (D-squared PPO)는 DPPO의 핵심 문제인 **다양성 붕괴(diversity collapse)** 를 해결합니다. RL 미세조정 과정에서 모델이 고보상 이미지 유형에만 집중하여 생성 다양성을 잃는 현상입니다.
+
+### 분산 손실
+
+D²PPO는 생성된 이미지들 사이의 다양성을 직접 최대화하는 **분산 손실(variance loss)** 을 도입합니다.
+
+$$\mathcal{L}_{diversity} = -\text{Var}_{x_0 \sim \pi_\theta}[\phi(x_0)]$$
+
+여기서 $\phi(x_0)$ 는 이미지의 CLIP 임베딩입니다. 이 손실은 생성된 이미지들이 임베딩 공간에서 서로 멀리 퍼지도록 장려합니다.
+
+최종 손실:
+
+$$\mathcal{L}_{D^2PPO} = \mathcal{L}_{DPPO} + \gamma \cdot \mathcal{L}_{diversity}$$
+
+## Beyond Dirac Delta: RL 미세조정의 다양성 붕괴 해결
+
+**Beyond Dirac Delta** (arXiv:2601.12401)는 확산 RL 미세조정에서 다양성 붕괴의 **이론적 원인** 을 분석하고 해결책을 제시합니다.
+
+### 다양성 붕괴의 이론적 분석
+
+표준 RL 미세조정은 정책을 점점 결정론적으로 만드는 경향이 있습니다. 극단적으로는 정책이 **Dirac delta 분포** 에 수렴합니다. 즉, 항상 같은 이미지만 생성하게 됩니다.
+
+$$\pi_\theta(x_0) \to \delta(x_0 - x_0^*)$$
+
+여기서 $x_0^*$ 는 보상 최대화 이미지다. 이는 보상 함수를 해킹하는 결과를 초래합니다.
+
+### 해결책: 엔트로피 정규화
+
+엔트로피 정규화를 통해 정책의 다양성을 유지합니다.
+
+$$\mathcal{L}_{entropy} = -\mathbb{E}[\mathcal{H}(\pi_\theta(\cdot | x_t, t))]$$
+
+이를 전체 손실에 추가하면.
+
+$$\mathcal{L}_{total} = \mathcal{L}_{RL} - \lambda \cdot \mathbb{E}[\mathcal{H}(\pi_\theta)]$$
+
+엔트로피 항이 정책이 너무 좁아지는 것을 방지합니다.
+
+## 확산 모델 RL 방법 비교
+
+| 방법 | KL 정규화 | 다양성 보존 | 계산 비용 | 주요 장점 |
+|------|---------|---------|---------|---------|
+| DDPO | 없음 | 낮음 | 중간 | 단순, 강한 최적화 |
+| DPOK | 있음 | 중간 | 중간 | 균형, 정렬+품질 |
+| DPPO | 선택적 | 중간 | 높음 | 2층 제어 |
+| D²PPO | 있음 | 높음 | 높음 | 다양성 + 품질 |
+| Beyond Dirac | 엔트로피 | 높음 | 중간 | 이론적 근거 |
+
+## 확산 RL의 응용
+
+**텍스트-이미지 정렬 향상**: 프롬프트를 더 충실하게 반영하는 이미지 생성. CLIP 점수 기반 보상으로 최적화.
+
+**인간 미적 선호 학습**: 미적 분류기나 인간 선호 모델로 더 아름다운 이미지 생성.
+
+**특정 스타일 강화**: 예술 스타일, 사진 스타일 등 특정 시각적 특성 강화.
+
+**안전성 향상**: 유해 이미지 생성을 줄이는 보상 설계.
+
+**의료 이미지 품질**: 진단 정확도 기반 보상으로 의료 이미지 품질 향상.
+
+## 정리
+
+확산 모델에 RL을 적용하는 것은 이미지 생성의 목표 지향적 최적화를 가능하게 합니다. DDPO는 KL 정규화 없는 강한 최적화를 제공하고, DPOK는 이미지-텍스트 정렬과 품질을 동시에 향상시키며, DPPO는 2층 MDP 구조로 더 정교한 제어를 실현합니다. D²PPO와 Beyond Dirac Delta는 다양성 붕괴라는 핵심 문제를 각각 실증적, 이론적으로 해결합니다. 이 방향은 단순한 이미지 생성을 넘어 목표 지향적이고 제어 가능한 생성 AI의 실현을 향해 나아가고 있습니다.

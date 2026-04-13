@@ -1,0 +1,132 @@
+---
+title: "StepCoder와 RLEF"
+description: "커리큘럼 기반 코드 완성 학습과 실행 피드백 기반 강화학습 — StepCoder, RLEF, CodePRM"
+sidebar:
+  order: 2
+learning_objectives:
+  - StepCoder의 CCCS(Curriculum of Code Completion Subtasks)와 FGO(Fine-Grained Optimization)의 원리를 설명할 수 있다
+  - RLEF가 코드 실행 결과를 직접 보상으로 활용하는 방식과 실행 의미론 정렬의 의미를 이해한다
+  - CodePRM의 Generate-Verify-Refine 파이프라인이 코드 품질을 높이는 방식을 분석할 수 있다
+estimated_minutes: 30
+references:
+  - title: "StepCoder: Improve Code Generation with Reinforcement Learning from Compiler Feedback"
+    url: "https://arxiv.org/abs/2402.01391"
+  - title: "RLEF: Grounding Code LLMs in Execution Feedback with Reinforcement Learning"
+    url: "https://arxiv.org/abs/2410.02089"
+  - title: "CodePRM: Code Process Reward Model via Generate-Verify-Refine"
+    url: "https://arxiv.org/abs/2410.17621"
+---
+
+## StepCoder: 커리큘럼 기반 코드 완성 학습
+
+**StepCoder** (Dou et al., ACL 2024)는 코드 생성을 위한 RL 훈련의 두 가지 핵심 문제를 해결하기 위해 설계되었다. 첫째는 긴 코드 시퀀스에서의 희소 보상 문제이고, 둘째는 탐색(exploration)의 비효율성입니다. StepCoder는 이를 위해 두 가지 핵심 구성 요소를 결합합니다.
+
+### CCCS: Curriculum of Code Completion Subtasks
+
+완전한 코드를 한 번에 생성하는 대신, StepCoder는 코드를 **점진적으로 더 긴 서브태스크** 로 나누어 학습합니다.
+
+```
+전체 함수 구현 목표:
+def solve(nums, target):
+    [완전한 구현]
+
+커리큘럼 단계:
+1단계: def solve(nums, target):  → return []
+2단계: def solve(nums, target):
+           result = []  → [다음 줄 완성]
+3단계: ... (점진적으로 더 긴 맥락)
+```
+
+이 접근법의 수학적 동기는 다음과 같습니다. 전체 시퀀스 길이 $L$ 의 코드에서 보상 $r$ 이 마지막에만 주어진다면, 시간적으로 이른 토큰에 대한 크레딧 할당(credit assignment)이 매우 어렵습니다. CCCS는 각 서브태스크에 독립적인 보상을 부여함으로써 이 문제를 $O(L)$ 에서 $O(L/k)$ 수준으로 완화한다 (여기서 $k$ 는 서브태스크 수).
+
+### FGO: Fine-Grained Optimization
+
+CCCS만으로는 부족하다. 컴파일러 피드백을 단순히 이진 신호로 처리하면 탐색 효율이 낮습니다. FGO는 **컴파일러 오류 위치** 를 활용하여 정책 최적화를 세밀하게 조정합니다.
+
+오류가 발생한 코드 행 $l_{err}$ 이후의 토큰에 대한 정책 경사 업데이트를 마스킹(masking)합니다.
+
+$$\mathcal{L}_{FGO} = -\sum_{t=1}^{l_{err}-1} \hat{A}_t \cdot \log \pi_\theta(c_t | c_{<t}, x)$$
+
+오류 이전까지의 올바른 부분에만 보상을 전파함으로써, 모델이 실제로 개선해야 할 지점에 집중하게 만듭니다.
+
+### APPS+ 데이터셋
+
+StepCoder는 APPS 데이터셋을 확장한 **APPS+** 를 사용합니다. 원본 APPS의 문제에 추가적인 단위 테스트와 중간 상태 체크를 포함시켜 더 풍부한 커리큘럼 학습을 가능하게 합니다.
+
+| 데이터셋 | 문제 수 | 테스트케이스/문제 | 난이도 분포 |
+|---------|---------|-----------------|------------|
+| APPS | 10,000 | 평균 21.2 | Intro/Interview/Competition |
+| APPS+ | 10,000 | 평균 34.7 | + 중간 단계 체크 |
+
+## RLEF: 실행 피드백 기반 RL
+
+**RLEF** (Gehring et al., ICLR 2025)는 코드 실행 결과(execution feedback)를 직접 보상으로 활용하는 접근법입니다. 핵심 통찰은 **실행 의미론(execution semantics)** 과 모델 출력의 정렬입니다.
+
+### 실행 의미론 정렬
+
+코드 LLM의 훈련 목표(다음 토큰 예측)와 실제 목표(코드가 올바르게 실행됨) 사이에는 근본적인 간극이 있습니다. RLEF는 이 간극을 다음과 같이 좁힌다.
+
+$$\pi^* = \arg\max_\pi \mathbb{E}_{c \sim \pi(\cdot|x)} [r_{exec}(c, \mathcal{T})]$$
+
+여기서 $r_{exec}$ 는 실제 코드 실행 결과에 기반한 보상입니다. 중요한 점은 RLEF가 별도의 보상 모델을 학습하지 않는다는 것입니다. **코드 실행기 자체가 보상 모델** 입니다.
+
+### 주요 구성 요소
+
+RLEF는 세 가지 혁신을 결합합니다.
+
+1. **온라인 코드 실행 루프**: 매 훈련 스텝마다 생성된 코드를 실시간으로 실행하여 보상 획득
+2. **다중 샘플링 전략**: 각 문제에 대해 여러 후보 코드를 생성하여 가장 높은 보상의 궤적을 활용
+3. **KL 발산 정규화**: 기본 정책에서 너무 멀리 벗어나지 않도록 제약
+
+$$\mathcal{L}_{RLEF} = -\mathbb{E}[r_{exec}] + \beta \cdot D_{KL}(\pi_\theta \| \pi_{ref})$$
+
+### 실험 결과
+
+RLEF는 HumanEval, MBPP, APPS 등 주요 코드 벤치마크에서 SFT 기준선 대비 일관된 성능 향상을 보였다.
+
+| 모델 | HumanEval Pass@1 | MBPP Pass@1 |
+|------|-----------------|-------------|
+| CodeLlama-7B (SFT) | 36.6% | 47.2% |
+| CodeLlama-7B (RLEF) | 46.3% | 54.1% |
+| CodeLlama-34B (SFT) | 48.8% | 55.4% |
+| CodeLlama-34B (RLEF) | **61.0%** | **62.3%** |
+
+## CodePRM: Generate-Verify-Refine 파이프라인
+
+**CodePRM** (Luo et al., ACL 2025 Findings)은 프로세스 보상 모델을 코드 생성에 적용합니다. 단순히 최종 코드를 평가하는 것이 아니라 **생성 과정의 각 단계** 를 평가합니다.
+
+### 파이프라인 구조
+
+```
+Generate → 여러 후보 코드 생성
+    ↓
+Verify  → 각 코드의 중간 단계 프로세스 점수 계산
+    ↓
+Refine  → 낮은 점수 단계를 재생성
+```
+
+**Generate** 단계에서는 빔 서치나 샘플링을 통해 $K$ 개의 후보를 생성합니다. **Verify** 단계에서는 각 코드 블록(예: 함수 내 논리 단계)에 대해 프로세스 보상 점수 $r_{PRM}(s_i)$ 를 계산합니다. **Refine** 단계에서는 점수가 낮은 단계를 식별하여 해당 부분부터 재생성합니다.
+
+### 코드에서의 프로세스 경계 정의
+
+텍스트와 달리 코드에는 자연스러운 프로세스 경계가 있습니다.
+
+- **구문 블록**: if/for/while 블록 단위
+- **함수 호출**: 각 외부 함수 호출 지점
+- **주석 구분**: 개발자 주석으로 표시된 논리 단계
+
+이러한 명확한 경계 덕분에 코드에서의 PRM은 수학 추론에서보다 적용이 용이하다.
+
+## 세 접근법 비교
+
+| 특성 | StepCoder | RLEF | CodePRM |
+|------|----------|------|---------|
+| 핵심 혁신 | 커리큘럼 + 세밀한 최적화 | 실행 의미론 정렬 | 프로세스 보상 |
+| 보상 신호 | 컴파일러 오류 위치 | 실행 결과 직접 | 단계별 프로세스 점수 |
+| 추론 시 오버헤드 | 낮음 | 낮음 | 중간 (재생성) |
+| 주요 벤치마크 | APPS+ | HumanEval, MBPP | 복합 추론 |
+| 외부 모델 의존 | 비평 모델 | 없음 | PRM 모델 |
+
+## 정리
+
+StepCoder, RLEF, CodePRM은 각각 서로 다른 각도에서 코드 RL의 핵심 문제에 접근합니다. StepCoder는 학습 커리큘럼을 통해 탐색 효율을 높이고, RLEF는 실행 의미론과의 직접 정렬을 추구하며, CodePRM은 생성 과정 자체를 평가하는 프로세스 보상을 도입합니다. 이 세 가지 방향은 상호 보완적이며, 최신 코드 생성 시스템은 이들을 통합하는 방향으로 발전하고 있습니다.

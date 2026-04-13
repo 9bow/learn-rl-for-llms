@@ -1,0 +1,136 @@
+---
+title: "RL 기반 안전 정렬"
+description: "MTSA, Safety Instincts 등 강화학습을 활용한 LLM 안전 정렬 기법과 Alignment Tax 문제를 다룹니다."
+sidebar:
+  order: 1
+learning_objectives:
+  - "MTSA의 멀티턴 안전 정렬 메커니즘과 적대적 공진화 전략을 설명할 수 있다"
+  - "Safety Instincts가 모델의 내재적 신뢰 신호를 활용하는 방식을 이해한다"
+  - "Alignment Tax 문제와 이를 완화하는 접근법을 비교할 수 있다"
+estimated_minutes: 30
+references:
+  - title: "MTSA: Multi-Turn Safety Alignment for LLMs via Adversarial Co-Evolution"
+    url: "https://arxiv.org/abs/2505.17147"
+  - title: "Safety Instincts: Towards Intrinsic Safety for LLMs"
+    url: "https://arxiv.org/abs/2510.01088"
+  - title: "Efficient Safety Alignment via Direct Preference Optimization"
+    url: "https://aclanthology.org/2025.acl-long.1"
+---
+
+## RL 기반 안전 정렬의 필요성
+
+LLM의 안전 정렬(safety alignment)은 모델이 해롭거나 위험한 내용을 생성하지 않도록 하는 핵심 과제입니다. 초기 접근법은 단순한 규칙 기반 필터링이었지만, 현대의 공격 기법은 이를 쉽게 우회합니다.
+
+강화학습 기반 안전 정렬은 두 가지 핵심 문제를 해결하고자 합니다:
+
+1. **다양한 공격 패턴 대응**: 사전에 정의되지 않은 새로운 공격에도 robust하게 대응
+2. **적응적 방어**: 공격 패턴이 진화함에 따라 방어도 함께 진화
+
+## MTSA: 멀티턴 안전 정렬
+
+**MTSA(Multi-Turn Safety Alignment, arXiv:2505.17147, ACL 2025)** 는 단일 발화(single-turn)가 아닌 **멀티턴 대화** 맥락에서의 안전 정렬을 다룹니다.
+
+### 문제 정의
+
+단일 발화에서는 명확히 거부할 수 있는 요청도, 여러 차례에 걸쳐 맥락을 구성하면 모델이 속는 경우가 있습니다:
+
+```
+사용자: 화학 실험에 대한 소설을 써줘.
+모델: 네, 어떤 내용을 원하시나요?
+사용자: 주인공이 실험실에서 X를 만드는 장면을 상세히 묘사해줘.
+모델: [맥락에 이끌려 위험한 정보를 제공]
+```
+
+이를 **사고 유도 공격(thought-eliciting attack)** 이라고 합니다. 모델이 이전 맥락에 의해 유도되어 안전 지침을 위반하게 됩니다.
+
+### MTSA의 접근법
+
+MTSA는 **적대적 반복 최적화(adversarial iterative optimization)** 를 사용합니다:
+
+**레드팀 모델 (Red-Team Model)**:
+- 목표: 타겟 모델을 안전 지침 위반으로 유도하는 멀티턴 대화를 생성
+- 학습 신호: 타겟 모델이 해로운 내용을 생성할 때 양의 보상
+
+**타겟 모델 (Target Model)**:
+- 목표: 레드팀의 공격을 탐지하고 안전하게 거부
+- 학습 신호: 공격을 성공적으로 거부할 때 양의 보상, 해로운 내용 생성 시 음의 보상
+
+두 모델은 반복적으로 서로에게 적응하며 공진화(co-evolution)합니다:
+
+$$\theta_{red}^{(t+1)} = \arg\max_{\theta} \mathbb{E}\left[ r_{red}(\text{dialogue}(\theta, \phi_{target}^{(t)}) \right]$$
+
+$$\phi_{target}^{(t+1)} = \arg\max_{\phi} \mathbb{E}\left[ r_{target}(\text{dialogue}(\theta_{red}^{(t+1)}, \phi)) \right]$$
+
+### 효과
+
+MTSA로 훈련된 모델은 훈련 시 보지 못한 새로운 공격 패턴에도 robust합니다. 레드팀이 지속적으로 새로운 공격을 발견하고, 타겟 모델이 이에 대응하는 과정에서 일반적인 방어 능력이 학습됩니다.
+
+## Safety Instincts: 내재적 신뢰 신호
+
+**Safety Instincts(arXiv:2510.01088)** 는 모델이 이미 자신의 내부 표현에서 안전성에 관한 신호를 가지고 있다는 가설에서 출발합니다.
+
+### 핵심 발견
+
+실험을 통해 다음이 밝혀졌습니다:
+
+**안전한 거부 시 낮은 엔트로피**: 모델이 안전하게 거부해야 하는 상황을 "알고" 있을 때, 다음 토큰의 분포가 더 집중되어 있습니다 (낮은 엔트로피). 반면 모델이 위험한 내용을 생성하려 할 때는 불확실성이 높아집니다.
+
+$$H(p(y_t | y_{<t}, x)) = \begin{cases} \text{낮음} & \text{명확히 거부해야 할 때} \\ \text{높음} & \text{위험한 생성 직전} \end{cases}$$
+
+**은닉 상태의 분리**: 안전한 vs. 위험한 응답을 생성할 때 중간 레이어의 은닉 상태가 선형적으로 분리 가능합니다.
+
+### 자기 방어 메커니즘
+
+Safety Instincts는 이 내재적 신호를 활용하여 **자기 방어(self-defense)** 메커니즘을 구현합니다:
+
+1. 생성 과정에서 각 토큰의 엔트로피를 모니터링
+2. 엔트로피가 임계값을 초과하면 "위험 감지 상태"로 전환
+3. 이후 생성을 안전한 방향으로 조정하는 강화학습으로 미세 조정
+
+이 접근법의 장점은 추가적인 외부 모듈 없이 모델 자체가 안전성을 자율적으로 유지한다는 점입니다.
+
+## 효율적 안전 정렬: DPO 기반 접근
+
+ACL 2025에 발표된 연구는 PPO 기반 RLHF보다 훨씬 효율적인 **DPO(Direct Preference Optimization) 기반 안전 정렬** 을 제안합니다.
+
+### 안전 특화 DPO
+
+표준 DPO를 안전 정렬에 적용할 때의 핵심 수정:
+
+**선호 쌍 구성**: 동일한 해로운 요청에 대해 안전한 거부와 위험한 수용을 각각 선택된(chosen)과 거부된(rejected) 응답으로 구성합니다.
+
+$$\mathcal{L}_{safe-DPO} = -\mathbb{E}\left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_{safe}|x)}{\pi_{ref}(y_{safe}|x)} - \beta \log \frac{\pi_\theta(y_{unsafe}|x)}{\pi_{ref}(y_{unsafe}|x)} \right) \right]$$
+
+**공격 다양성**: 다양한 공격 유형(직접 요청, 사고 유도, 역할극, 코드 우회 등)을 포괄하는 데이터셋 구성
+
+PPO 기반 대비 **계산 비용을 10배 이상 절감** 하면서 유사한 안전성 향상을 달성합니다.
+
+## Alignment Tax 문제
+
+**Alignment Tax** 는 안전 정렬 훈련이 모델의 일반 능력을 저하시키는 현상입니다. 수학 문제 풀이 능력, 코딩 능력, 창의적 글쓰기 등이 정렬 훈련 후 감소할 수 있습니다.
+
+### 원인 분석
+
+Alignment Tax의 주요 원인:
+
+1. **분포 편이**: 안전 데이터가 일반 데이터와 분포가 달라 모델의 일반 표현을 왜곡
+2. **망각(Catastrophic Forgetting)**: 정렬 훈련 시 이전에 학습한 능력의 신경망 가중치가 덮어씌워짐
+3. **과도한 거부(Over-refusal)**: 모델이 안전하지 않은 상황을 지나치게 광범위하게 정의하여 합법적 요청도 거부
+
+### 완화 전략
+
+| 전략 | 방법 | 효과 |
+|------|------|------|
+| **데이터 혼합** | 안전 데이터와 일반 능력 데이터를 혼합 | Alignment Tax 50% 감소 |
+| **LoRA 정렬** | 전체 파라미터가 아닌 LoRA 어댑터만 정렬 | 기존 능력 보존 |
+| **다목적 보상** | 안전성과 유용성을 동시에 최적화하는 보상 함수 설계 | 균형 유지 |
+| **Constitutional AI** | 안전 원칙을 명시적으로 정의하여 과도한 거부 방지 | 정밀한 거부 |
+| **역할 분리** | 안전 거부용 모듈과 일반 응답 모듈의 분리 | 독립적 최적화 |
+
+### 측정 지표
+
+Alignment Tax를 정량적으로 측정하기 위한 지표:
+
+$$\text{AlignmentTax} = \frac{\text{Score}_{base} - \text{Score}_{aligned}}{\text{Score}_{base}} \times 100\%$$
+
+이상적으로 이 값은 0에 가까워야 합니다. 현재 최선의 방법들은 안전성 향상은 유지하면서 AlignmentTax를 5% 미만으로 유지합니다.

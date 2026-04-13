@@ -1,0 +1,107 @@
+---
+title: "DAPO와 Dr. GRPO"
+description: "ByteDance의 DAPO와 Dr. GRPO가 GRPO의 한계를 극복하고 추론 성능을 향상시키는 방법을 학습합니다."
+sidebar:
+  order: 3
+learning_objectives:
+  - "DAPO의 Decoupled Clip과 Dynamic Sampling이 학습 효율을 높이는 원리를 이해한다"
+  - "토큰 수준 정책 그래디언트 손실의 의미와 시퀀스 수준 대비 장점을 설명할 수 있다"
+  - "Dr. GRPO가 GRPO의 KL 항과 bias 문제를 어떻게 식별하고 수정하는지 이해한다"
+estimated_minutes: 25
+references:
+  - title: "DAPO: An Open-Source LLM Reinforcement Learning System at Scale"
+    authors: "Yu, Q., et al. (ByteDance Seed)"
+    year: 2025
+    url: "https://arxiv.org/abs/2503.14476"
+  - title: "Dr. GRPO: Removing Bias in GRPO's Group Normalization"
+    authors: "Liu, Z., et al."
+    year: 2025
+    url: "https://arxiv.org/abs/2503.20783"
+---
+
+## GRPO의 실용적 한계
+
+GRPO는 Critic을 제거하여 메모리 효율성을 높였지만, 대규모 추론 훈련에서 몇 가지 실용적 문제가 드러났다. 첫째, 엔트로피 붕괴(entropy collapse): 학습이 진행될수록 모델이 특정 응답 패턴에 수렴하여 다양성이 급감한다. 둘째, 훈련 불안정성: 보상 분산이 크거나 그룹 크기가 작을 때 advantage 추정이 불안정하다. 셋째, 길이 편향: 긴 응답이 더 높은 보상을 받도록 편향될 수 있다.
+
+---
+
+## DAPO: Decoupled Clip and Dynamic Sampling Policy Optimization
+
+**DAPO** (ByteDance Seed, 2025, arXiv:2503.14476)는 이 문제들을 해결하기 위해 네 가지 핵심 기법을 도입했다.
+
+### 1. Decoupled Clip (분리된 클리핑)
+
+GRPO는 PPO와 동일한 대칭적 클리핑을 사용한다.
+
+$$
+\text{clip}(\rho, 1-\varepsilon, 1+\varepsilon)
+$$
+
+DAPO는 이를 비대칭적으로 분리한다.
+
+$$
+\text{clip\_higher}: \quad \rho \leq 1 + \varepsilon_{\text{high}}
+$$
+$$
+\text{clip\_lower}: \quad \rho \geq 1 - \varepsilon_{\text{low}}
+$$
+
+$\varepsilon_{\text{high}} > \varepsilon_{\text{low}}$로 설정하면, 좋은 응답(양의 advantage)에 대해서는 더 큰 업데이트를 허용하고, 나쁜 응답(음의 advantage) 억제에는 더 보수적으로 접근한다. 이는 엔트로피 유지와 탐색 장려에 효과적이다.
+
+### 2. Dynamic Sampling (동적 샘플링)
+
+표준 GRPO는 모든 프롬프트에서 동일한 수의 응답을 샘플링한다. DAPO는 배치 내 프롬프트별로 동적으로 샘플링 수를 조절한다. 그룹 내 모든 응답이 동일한 결과(모두 정답 또는 모두 오답)인 경우 해당 프롬프트를 배치에서 제거하고, 정보가 있는 프롬프트를 더 샘플링한다.
+
+$$
+\text{유효 프롬프트} = \{x \mid \text{var}(r_1, \ldots, r_G) > 0\}
+$$
+
+이는 정보 없는 gradient 업데이트를 방지하고 학습 효율을 극적으로 향상시킨다.
+
+### 3. 토큰 수준 정책 그래디언트 손실
+
+GRPO는 시퀀스 수준에서 손실을 평균하지만, DAPO는 토큰 수준으로 처리한다.
+
+$$
+L_{\text{DAPO}} = -\frac{\sum_{i=1}^{G}\sum_{t=1}^{|y_i|} \min(\rho_{i,t}\hat{A}_i,\ \text{clip}(\rho_{i,t})\hat{A}_i)}{\sum_{i=1}^{G}|y_i|}
+$$
+
+분모가 전체 토큰 수이므로, 긴 응답과 짧은 응답이 길이에 비례한 영향을 가진다. 이는 길이 편향을 방지한다.
+
+### 4. 소프트 KL 페널티 제거
+
+DAPO는 KL 페널티 항을 제거하고, 대신 클리핑으로만 정책 이탈을 제어한다. 이는 불필요한 참조 모델 계산을 줄이고 학습을 단순화한다.
+
+### DAPO 성능
+
+AIME 2024에서 **50점** 달성 (GRPO 기반 기존 방법 대비 약 50% 적은 학습 스텝으로). 학습 효율과 최종 성능 모두에서 개선을 보였다.
+
+---
+
+## Dr. GRPO: Bias 제거된 GRPO
+
+**Dr. GRPO** 는 GRPO의 이론적 문제를 분석하고 두 가지 bias를 식별한다.
+
+### 문제 1: KL 페널티의 불필요성
+
+GRPO의 KL 페널티 항은 이론적으로 불필요하다. 클리핑 메커니즘이 이미 정책 이탈을 제어하므로 KL 항은 중복적이며, 오히려 gradient 흐름을 방해할 수 있다. Dr. GRPO는 KL 항 없이 더 나은 성능을 보임을 실험적으로 증명했다.
+
+### 문제 2: 그룹 정규화의 Length Bias
+
+GRPO의 advantage 정규화는 다음 bias를 포함한다.
+
+$$
+\hat{A}_i = \frac{r_i - \bar{r}}{\sigma_r}
+$$
+
+이 추정은 그룹 크기 $G$가 작을 때 편향(biased estimator)이며, 응답 길이와 보상 간의 상관관계로 인해 체계적 오류가 발생한다. Dr. GRPO는 편향 수정(bias-corrected) 추정량을 사용한다.
+
+| 항목 | GRPO | DAPO | Dr. GRPO |
+|------|------|------|----------|
+| 클리핑 | 대칭 | 비대칭 (분리) | 대칭 |
+| KL 페널티 | 있음 | 없음 | 없음 |
+| 샘플링 | 고정 | 동적 | 고정 |
+| Bias 수정 | 없음 | 부분적 | 명시적 |
+| 이론적 근거 | 경험적 | 경험적 | 이론적 |
+
+DAPO와 Dr. GRPO는 서로 다른 관점에서 GRPO를 개선하며, 실제로는 두 방법의 기법을 조합하여 사용하는 것이 가장 효과적이다.

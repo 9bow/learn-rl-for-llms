@@ -1,0 +1,52 @@
+---
+title: LLM을 위한 강화학습
+description: LLM 분야에서의 강화학습 기법에 대한 종합 학습 가이드
+template: splash
+hero:
+  tagline: 기초부터 RLHF, RLVR, 에이전트 RL까지 — LLM 강화학습의 모든 것
+  actions:
+    - text: 학습 시작하기
+      link: /learn-rl-for-llms/01-rl-fundamentals/01-what-is-rl/
+      icon: right-arrow
+      variant: primary
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## 커리큘럼 개요
+
+<CardGrid>
+  <Card title="01. 강화학습 기초 (~2.5시간)" icon="open-book">
+    MDP, 정책, 가치 함수, PPO, 보상 설계의 기본 개념을 학습합니다.
+  </Card>
+  <Card title="02. LLM과 RL의 만남 (~2.5시간)" icon="rocket">
+    LLM을 RL 에이전트로 바라보는 관점과 핵심 기법들을 이해합니다.
+  </Card>
+  <Card title="03. RLHF (~3시간)" icon="star">
+    인간 피드백 강화학습의 파이프라인, 보상 모델, 실전 적용을 학습합니다.
+  </Card>
+  <Card title="04. 직접 선호 최적화 (~3시간)" icon="puzzle">
+    DPO, SimPO 등 RLHF의 대안적 접근법들을 심층 분석합니다.
+  </Card>
+  <Card title="05. Reasoning과 RL (~3.5시간)" icon="pencil">
+    GRPO, DAPO, PRM 등 추론 능력을 강화하는 RL 기법을 다룹니다.
+  </Card>
+  <Card title="06. RLVR (~3시간)" icon="approve-check-circle">
+    검증 가능한 보상 기반 RL과 DeepSeek-R1의 학습 전략을 분석합니다.
+  </Card>
+  <Card title="07. 코드 생성과 RL (~2.5시간)" icon="laptop">
+    코드 생성에 특화된 RL 기법과 오픈소스 추론 모델을 학습합니다.
+  </Card>
+  <Card title="08. Vision 모델과 RL (~3.5시간)" icon="sun">
+    멀티모달 RLHF, RLSD, Diffusion RL 등 시각 모델의 RL을 다룹니다.
+  </Card>
+  <Card title="09. 에이전트 RL (~3시간)" icon="setting">
+    웹 에이전트, 도구 사용, 멀티턴/멀티 에이전트 RL을 학습합니다.
+  </Card>
+  <Card title="10. RL 인프라 (~1.5시간)" icon="document">
+    OpenRLHF, veRL, TRL 등 프레임워크와 분산 학습을 비교합니다.
+  </Card>
+  <Card title="11. 안전성과 미래 (~1.5시간)" icon="warning">
+    RL 기반 안전 정렬, Scalable Oversight, 열린 문제를 탐구합니다.
+  </Card>
+</CardGrid>

@@ -1,0 +1,132 @@
+---
+title: "규칙 기반 보상 설계"
+description: "Format Reward, Accuracy Reward, Length Penalty 등 RLVR에서 사용하는 규칙 기반 보상의 설계 원칙과 DeepSeek-R1 적용 사례를 학습합니다."
+sidebar:
+  order: 4
+learning_objectives:
+  - "Format Reward와 Accuracy Reward의 역할과 설계 방법을 이해한다"
+  - "Length Penalty가 과도한 출력을 방지하는 메커니즘을 설명할 수 있다"
+  - "복합 보상을 조합하고 가중치를 조절하는 실용적 전략을 파악한다"
+estimated_minutes: 22
+references:
+  - title: "DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning"
+    authors: "DeepSeek-AI"
+    year: 2025
+    url: "https://arxiv.org/abs/2501.12948"
+  - title: "DAPO: An Open-Source LLM Reinforcement Learning System at Scale"
+    authors: "Yu, Q., et al."
+    year: 2025
+    url: "https://arxiv.org/abs/2503.14476"
+---
+
+## 규칙 기반 보상의 역할
+
+RLVR에서 정확성 보상(정답 여부)만으로는 충분하지 않다. 모델이 올바른 답을 생성하더라도 형식이 파싱 불가능하거나, 지나치게 길거나, 언어가 일관되지 않을 수 있다. **규칙 기반 보상** 은 이러한 추가적인 품질 기준을 강제하는 보조 보상 신호다.
+
+규칙 기반 보상의 핵심 특성은 학습된 모델이 아닌 **명시적 규칙** 으로 계산된다는 점이다. 따라서 보상 해킹이 불가능하고, 설계자가 정확히 무엇을 최적화하는지 이해할 수 있다.
+
+---
+
+## Format Reward: 형식 준수 보상
+
+형식 보상은 모델 응답이 특정 구조를 따르는지 검사한다. DeepSeek-R1에서 사용한 형식 요구사항은 다음과 같다.
+
+```
+<think>
+[추론 과정]
+</think>
+<answer>
+[최종 답변]
+</answer>
+```
+
+형식 보상의 계산:
+
+$$
+r_{\text{format}}(y) = \begin{cases}
+1 & \text{if } \langle\text{think}\rangle \ldots \langle/\text{think}\rangle \langle\text{answer}\rangle \ldots \langle/\text{answer}\rangle \text{ 형식 준수} \\
+0 & \text{otherwise}
+\end{cases}
+$$
+
+형식 보상은 두 가지 역할을 한다. 첫째, 정답 추출을 용이하게 한다. `<answer>` 태그 내의 내용만 추출하면 되므로 정확성 검증이 단순해진다. 둘째, 추론 과정과 최종 답을 명확히 분리하여 가독성을 높인다.
+
+**주의점**: 형식 보상이 너무 높으면 모델이 내용보다 형식에 집중하는 과최적화(over-optimization)가 발생할 수 있다. DeepSeek-R1은 형식 보상 가중치를 정확성 보상의 10~20% 수준으로 설정했다.
+
+---
+
+## Accuracy Reward: 정확성 보상
+
+정확성 보상은 RLVR의 핵심으로, 앞서 설명한 수학/코딩 검증기를 통해 계산한다.
+
+$$
+r_{\text{accuracy}}(x, y) = \mathbb{1}[\text{verify}(\text{extract}(y), a^*)]
+$$
+
+정확성 보상 설계에서 중요한 결정은 **부분 점수** 부여 여부다.
+
+| 방식 | 장점 | 단점 |
+|------|-----|-----|
+| 이진 (0 또는 1) | 보상 해킹 원천 차단 | 희소 보상으로 학습 어려움 |
+| 연속 (0~1) | 학습 신호 풍부 | 부분 정답 정의 모호 |
+
+수학에서는 이진 보상이 일반적이지만, 코딩에서는 테스트 통과율(연속값)이 더 효과적인 경우가 많다.
+
+---
+
+## Length Penalty: 길이 페널티
+
+모델은 긴 응답이 더 좋아 보인다고 학습하거나, 불확실할 때 장황하게 출력하는 경향이 있다. Length Penalty는 이를 방지한다.
+
+**소프트 페널티** (선호 방식):
+
+$$
+r_{\text{length}}(y) = -\lambda \cdot \max(0, |y| - L_{\text{target}})
+$$
+
+응답 길이가 목표 길이 $L_{\text{target}}$을 초과할 때만 페널티를 부과한다. 필요한 추론은 허용하되 불필요한 장황함을 억제한다.
+
+**하드 제한**: 최대 토큰 수를 설정하고 초과 시 생성을 중단한다. 구현이 단순하지만 중간에 잘린 추론으로 오답이 될 수 있다.
+
+---
+
+## 언어 일관성 보상
+
+다국어 모델에서 추론 중 언어가 혼합되는 문제가 있다. R1-Zero에서 발견된 것처럼, 한국어 프롬프트에 영어로 추론하는 등의 현상이 발생한다. 언어 일관성 보상은 이를 방지한다.
+
+$$
+r_{\text{lang}}(x, y) = \mathbb{1}[\text{lang}(y) = \text{lang}(x)]
+$$
+
+입력 언어와 출력 언어가 일치하면 1, 아니면 0이다. 간단하지만 실용적으로 중요한 보상이다.
+
+---
+
+## 복합 보상 조합 전략
+
+실제 RLVR 시스템에서는 여러 보상을 결합한다. DeepSeek-R1의 보상 구조:
+
+$$
+r_{\text{total}}(x, y) = r_{\text{accuracy}}(x, y) + w_f \cdot r_{\text{format}}(y) + w_l \cdot r_{\text{lang}}(x, y)
+$$
+
+| 보상 유형 | 가중치 | 역할 |
+|---------|------|-----|
+| 정확성 | 1.0 | 핵심 학습 목표 |
+| 형식 준수 | 0.1~0.2 | 파싱 가능성 보장 |
+| 언어 일관성 | 0.1 | 다국어 일관성 |
+| 길이 페널티 | 상황별 | 장황함 방지 |
+
+**가중치 튜닝 원칙**:
+- 보조 보상의 합이 정확성 보상을 초과하지 않도록 설정한다.
+- 학습 초기에는 보조 보상을 높여 형식을 먼저 안정화하고, 이후 낮춘다.
+- 보조 보상이 과도하면 모델이 형식 게임(format gaming)에 집중한다.
+
+---
+
+## 보상 설계의 일반 원칙
+
+1. **최소한의 보상**: 꼭 필요한 보상만 사용한다. 보상이 많을수록 최적화 목표가 복잡해진다.
+2. **해킹 저항성**: 각 보상을 설계할 때 모델이 보상을 속이면서 실질적 목표를 피하는 방법이 없는지 검토한다.
+3. **단조적 일관성**: 보상이 높을수록 실제 품질도 높아야 한다. 비단조적 보상은 학습을 불안정하게 만든다.
+4. **점진적 도입**: 새로운 보상 항은 한 번에 하나씩 추가하며 효과를 검증한다.

@@ -1,0 +1,136 @@
+---
+title: "Vision RLVR — 시각적 검증 가능 보상"
+description: "객체 탐지 IoU, OCR 정확도, 공간 추론 등 시각 도메인에서의 검증 가능한 보상 설계와 RLVR-World"
+sidebar:
+  order: 2
+learning_objectives:
+  - 시각 도메인에서 검증 가능한 보상을 설계하는 방법(IoU, 분류 정확도, OCR)을 설명할 수 있다
+  - Few-Shot Vision-Language Reasoning via Verifiable Rewards의 위성 이미지 적용 사례를 이해한다
+  - RLVR-World의 텍스트 게임, 웹 내비게이션, 로봇 조작 통합 접근법을 분석할 수 있다
+estimated_minutes: 28
+references:
+  - title: "Few-Shot Vision-Language Reasoning via Verifiable Rewards"
+    url: "https://arxiv.org/abs/2506.14245"
+  - title: "RLVR-World: Reinforcement Learning with Verifiable Rewards for World Models"
+    url: "https://openreview.net/forum?id=jpiSagi8aV"
+  - title: "Training Vision Language Models with GRPO"
+    url: "https://huggingface.co/learn/cookbook/en/fine_tuning_vlm_grpo_trl"
+  - title: "Visual Reinforcement Learning with Verifiable Rewards"
+    url: "https://arxiv.org/abs/2506.14245"
+---
+
+## 시각 도메인의 검증 가능한 보상
+
+**RLVR(Reinforcement Learning with Verifiable Rewards)** 은 원래 수학 추론 도메인에서 제안된 개념입니다. 정답이 명확히 검증 가능한 문제에 RL을 적용하는 이 패러다임은 시각 도메인으로 자연스럽게 확장됩니다. 시각 태스크 중 상당수가 객관적이고 자동으로 검증 가능한 정답을 가지고 있기 때문입니다.
+
+### 검증 가능한 시각 태스크
+
+| 태스크 | 검증 방법 | 보상 함수 |
+|-------|---------|---------|
+| 객체 탐지 | IoU@0.5 기준 | $r = \mathbf{1}[\text{IoU}(\hat{b}, b^*) \geq 0.5]$ |
+| 이미지 분류 | 레이블 일치 | $r = \mathbf{1}[\hat{y} = y^*]$ |
+| OCR | 문자열 편집 거리 | 편집거리 기반 정규화 점수 |
+| 공간 추론 | 관계 정확도 | $r = \mathbf{1}[\hat{rel} = rel^*]$ |
+| 계수(counting) | 숫자 일치 | $r = \mathbf{1}[\hat{n} = n^*]$ |
+| 색상 인식 | 색상 범주 일치 | $r = \mathbf{1}[\hat{c} = c^*]$ |
+
+이러한 보상들은 인간 주석자나 별도의 보상 모델 없이 **자동으로 계산** 할 수 있습니다. 이것이 Vision RLVR의 핵심 장점입니다.
+
+## 객체 탐지에서의 RLVR
+
+객체 탐지는 시각 RLVR의 가장 명확한 적용 사례다. 모델이 예측한 바운딩 박스 $\hat{b} = (x_1, y_1, x_2, y_2)$ 와 실제 바운딩 박스 $b^* = (x_1^*, y_1^*, x_2^*, y_2^*)$ 의 교집합-합집합 비율(IoU)로 보상을 정의합니다.
+
+$$\text{IoU}(\hat{b}, b^*) = \frac{|\hat{b} \cap b^*|}{|\hat{b} \cup b^*|}$$
+
+IoU는 0과 1 사이의 연속 값이므로, 이진 보상보다 더 풍부한 학습 신호를 제공합니다.
+
+$$r_{det} = \text{IoU}(\hat{b}, b^*) \cdot \mathbf{1}[\hat{class} = class^*]$$
+
+클래스 예측이 맞을 때만 IoU 보상이 활성화되는 이 설계는 오탐(false positive)을 효과적으로 억제합니다.
+
+## Few-Shot Vision-Language Reasoning via Verifiable Rewards
+
+**ICCV 2025 CDEL Workshop** 에 발표된 이 연구는 위성 이미지 분석이라는 도전적인 도메인에서 RLVR을 적용했다.
+
+### 위성 이미지의 특수성
+
+위성 이미지는 일반 사진과 다른 특성을 갖습니다.
+
+- **조감도(bird's eye view)**: 인간이 일상에서 보는 시점과 다름
+- **저해상도**: 지상 객체가 몇 픽셀에 불과
+- **도메인 특수성**: 대규모 일반 데이터 없음
+- **레이블 희소성**: 전문가 주석 비용 높음
+
+이런 이유로 소수 샘플(few-shot) 학습이 중요하며, RLVR은 레이블된 데이터 없이도 학습 가능하다는 장점이 있습니다.
+
+### RLVR 적용 결과
+
+| 태스크 | Few-Shot 기준선 | RLVR 적용 후 | 향상 |
+|-------|--------------|------------|------|
+| 건물 탐지 IoU@0.5 | 41.2% | 58.7% | +17.5%p |
+| 차량 계수 | 52.3% | 67.8% | +15.5%p |
+| 도로 분할 | 38.9% | 54.2% | +15.3%p |
+| 토지 피복 분류 | 61.4% | 72.9% | +11.5%p |
+
+검증 가능한 보상만으로 위성 이미지 분석의 정밀도가 크게 향상되었다. 특히 IoU@0.5 기준 건물 탐지 정밀도(precision)가 17.5%p 향상된 것은 실용적으로 매우 의미 있는 결과입니다.
+
+## RLVR-World: 통합 시각 환경 RLVR
+
+**RLVR-World** 는 단일 VLM을 텍스트 게임, 웹 내비게이션, 로봇 조작의 세 가지 시각 환경에서 동시에 훈련하는 통합 RLVR 프레임워큽니다.
+
+### 세 가지 환경
+
+**텍스트 게임(Text Games)**: 텍스트와 이미지가 혼합된 인터랙티브 게임 환경. 게임 점수가 직접 보상이 됩니다.
+
+$$r_{game} = \frac{\text{score}_t - \text{score}_{t-1}}{\text{max\_score}}$$
+
+**웹 내비게이션(Web Navigation)**: 스크린샷을 보고 웹 페이지를 탐색하는 태스크. 목표 URL 도달 여부가 이진 보상입니다.
+
+$$r_{web} = \mathbf{1}[\text{current\_url} = \text{target\_url}]$$
+
+**로봇 조작(Robot Manipulation)**: 시뮬레이터 내 로봇 팔 제어. 물체 위치 오차가 보상입니다.
+
+$$r_{robot} = \exp\left(-\frac{\|\hat{p} - p^*\|_2}{\sigma}\right)$$
+
+### 통합 학습의 이점
+
+서로 다른 시각 환경을 동시에 학습하면 **멀티태스크 전이** 효과가 발생합니다. 웹 내비게이션에서 학습한 UI 요소 인식이 텍스트 게임의 인터페이스 이해에 도움이 되는 식입니다.
+
+$$\mathcal{L}_{total} = \sum_{e \in \{game, web, robot\}} w_e \cdot \mathcal{L}_e$$
+
+## VLM GRPO 학습
+
+Hugging Face Cookbook에서 공개한 **VLM GRPO(Group Relative Policy Optimization)** 학습 레시피는 VLM에 검증 가능한 보상을 적용하는 실용적인 방법을 제시합니다.
+
+### GRPO의 VLM 적용
+
+GRPO는 각 쿼리 $q$ 에 대해 $G$ 개의 출력을 샘플링하고, 그 중 상대적으로 높은 보상을 받은 출력의 확률을 높이는 방식으로 학습합니다.
+
+$$\mathcal{L}_{GRPO} = -\mathbb{E}\left[\sum_{i=1}^{G} \frac{r_i - \bar{r}}{\text{std}(r)} \cdot \log \pi_\theta(o_i | q)\right]$$
+
+VLM에서 $q$ 는 이미지 $+$ 텍스트 프롬프트의 조합이며, 이미지 토큰도 컨텍스트로 함께 처리됩니다.
+
+### 시각 보상 유형별 GRPO 설정
+
+| 보상 유형 | 그룹 크기 $G$ | 온도 | 최적화 스텝 |
+|---------|------------|-----|----------|
+| VQA 정확도 | 8 | 0.7 | 500 |
+| 객체 탐지 IoU | 16 | 1.0 | 1000 |
+| OCR 정확도 | 8 | 0.5 | 800 |
+| 공간 추론 | 16 | 1.0 | 1200 |
+
+그룹 크기가 클수록 다양한 출력을 탐색할 수 있지만 메모리와 시간 비용이 증가합니다.
+
+## Vision RLVR의 한계와 과제
+
+**시각 모호성**: 같은 이미지도 다양한 설명이 가능합니다. 검증 가능한 보상은 이 모호성을 처리하기 어렵습니다.
+
+**보상 희소성**: 특히 어려운 시각 태스크(세밀한 객체 구분 등)에서 모델이 처음에 거의 보상을 받지 못해 탐색이 어렵습니다.
+
+**이미지 해상도 의존성**: 저해상도 이미지에서는 세밀한 정보 추출이 불가능하므로 보상이 부정확해진다.
+
+**도메인 특수성**: 위성 이미지, 의료 이미지 등 특수 도메인에서는 일반적인 검증 방법이 통하지 않을 수 있습니다.
+
+## 정리
+
+Vision RLVR은 객체 탐지 IoU, OCR 정확도, 공간 추론 등 자동으로 검증 가능한 시각 태스크에서 강력한 성능 향상을 보여줍니다. 위성 이미지 분석에서 17%p 이상의 정밀도 향상, 다중 환경 통합 학습(RLVR-World)의 멀티태스크 전이 효과는 이 패러다임의 실용적 가능성을 입증합니다. 검증 가능한 보상의 자동화는 대규모 VLM 훈련에서 인간 주석 의존도를 크게 줄이는 핵심 기술로 자리잡고 있습니다.

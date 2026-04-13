@@ -1,0 +1,104 @@
+---
+title: "탐색과 내재적 동기"
+description: "RL 기반 추론 학습에서 탐색의 중요성, 내재적 동기 기법, 호기심 기반 접근법을 학습합니다."
+sidebar:
+  order: 6
+learning_objectives:
+  - "RL 추론 학습에서 탐색이 부족할 때 발생하는 문제와 그 원인을 이해한다"
+  - "i-MENTOR, MERCI, CDE 등 내재적 동기 기법의 원리와 차이를 설명할 수 있다"
+  - "엔트로피 보너스와 temperature 조절이 탐색에 미치는 영향을 파악한다"
+estimated_minutes: 22
+references:
+  - title: "MERCI: Multiplicative Enhanced Reward via Curiosity for Improved Reasoning"
+    authors: "Song, Y., et al."
+    year: 2025
+    url: "https://arxiv.org/abs/2505.17621"
+  - title: "Curiosity-Driven Reinforcement Learning from Human Feedback"
+    authors: "Hu, J., et al."
+    year: 2025
+    url: "https://arxiv.org/abs/2510.16614"
+  - title: "i-MENTOR: Exploration with Intrinsic Motivation for Enhanced Reasoning"
+    authors: "Zhang, W., et al."
+    year: 2025
+    url: "https://arxiv.org/abs/2507.01293"
+---
+
+## 탐색 문제의 본질
+
+RL 기반 추론 훈련에서 가장 근본적인 도전 중 하나는 **탐색(exploration)** 이다. 모델이 다양한 추론 경로를 탐색해야만 더 나은 방법을 발견할 수 있다. 그러나 표준 GRPO/PPO 학습에서는 초기에 효과적인 패턴이 발견되면 모델이 빠르게 해당 패턴에 수렴하고, 다른 가능성을 탐색하지 않는 **탐색 붕괴(exploration collapse)** 가 발생한다.
+
+이는 두 가지 문제를 낳는다. 첫째, 지역 최적해(local optimum)에 갇힌다. 초기에 발견한 전략이 최적이 아닐 수 있다. 둘째, 분포의 다양성이 감소하여 edge case 처리 능력이 약화된다.
+
+외재적 보상(extrinsic reward)만으로는 탐색을 충분히 장려하기 어렵다. **내재적 동기(intrinsic motivation)** 는 이를 해결하기 위해 탐색 자체에 추가 보상을 부여하는 접근이다.
+
+## i-MENTOR: 탐색 보상과 궤적 인식 보상
+
+**i-MENTOR** 는 두 가지 내재적 보상을 결합한다.
+
+**탐색 보상(Exploration Reward)**: 현재 응답이 이전에 본 응답들과 얼마나 다른지를 측정한다. 코사인 유사도 또는 편집 거리(edit distance)를 기반으로, 새로운 추론 경로에 보너스를 부여한다.
+
+$$
+r_{\text{explore}}(y) = 1 - \max_{y' \in \mathcal{H}} \text{sim}(y, y')
+$$
+
+여기서 $\mathcal{H}$는 현재 배치의 이전 응답 집합이다.
+
+**궤적 인식 보상(Trajectory-Aware Reward)**: 단순히 새로운 응답이 아니라, 추론 과정의 구조적 다양성을 측정한다. 동일한 답에 도달하더라도 다른 추론 경로를 사용하면 보너스를 받는다.
+
+i-MENTOR는 수학 및 코딩 벤치마크에서 표준 GRPO 대비 일관된 성능 향상을 보고했다.
+
+## MERCI: 카운트 기반 내재적 동기
+
+**MERCI(Multiplicative Enhanced Reward via Curiosity for Improved reasoning)** 는 카운트 기반 탐색과 GRPO를 결합한다.
+
+각 (프롬프트, 응답 유형) 쌍의 방문 횟수 $N(x, y)$를 추적하고, 방문이 드문 응답에 더 높은 내재적 보상을 부여한다.
+
+$$
+r_{\text{intrinsic}}(x, y) = \frac{1}{\sqrt{N(x, y)}}
+$$
+
+이를 외재적 보상과 **곱셈(multiplicative)** 으로 결합한다.
+
+$$
+r_{\text{total}}(x, y) = r_{\text{extrinsic}}(x, y) \cdot (1 + \alpha \cdot r_{\text{intrinsic}}(x, y))
+$$
+
+덧셈 결합 대비 곱셈 결합은 외재적으로 유망한 응답의 탐색을 더 적극적으로 장려한다. arXiv:2505.17621에서 MATH, GSM8K, AIME에서 기저 GRPO 대비 개선을 보고했다.
+
+## CDE: 호기심 기반 탐색
+
+**CDE(Curiosity-Driven Exploration)** 는 예측 오류를 내재적 보상으로 사용하는 고전적 호기심 기반 RL의 LLM 적용이다. 보조 예측 모델이 현재 응답의 보상을 예측하고, 실제 보상과의 차이가 클수록(예측이 어려울수록) 더 높은 내재적 보상을 부여한다.
+
+$$
+r_{\text{curiosity}}(x, y) = \|r_{\text{predicted}}(x, y) - r_{\text{actual}}(x, y)\|^2
+$$
+
+이는 모델이 아직 충분히 학습하지 못한 어려운 유형의 문제로 탐색을 유도한다.
+
+## 엔트로피 보너스와 Temperature 조절
+
+가장 단순하면서도 효과적인 탐색 장려 방법은 **엔트로피 보너스** 다.
+
+$$
+r_{\text{total}} = r_{\text{extrinsic}} + \lambda \cdot \mathcal{H}(\pi_\theta(\cdot \mid x))
+$$
+
+여기서 $\mathcal{H}$는 정책 분포의 엔트로피다. 높은 엔트로피는 더 다양한 출력 분포를 의미하며, 보너스는 모델이 너무 일찍 특정 응답에 수렴하지 않도록 한다.
+
+**샘플링 temperature** 조절도 중요하다. 높은 temperature는 더 다양한 응답을 생성하지만 품질이 낮아질 수 있고, 낮은 temperature는 결정적이지만 탐색이 부족하다. DAPO의 동적 샘플링은 배치 구성 단계에서 이 트레이드오프를 관리한다.
+
+## Curiosity-Driven RLHF (ACL 2025)
+
+**Curiosity-Driven RLHF** (arXiv:2510.16614)는 RLHF 맥락에서 호기심 기반 탐색을 적용한다. 인간 선호 데이터가 희소한 영역을 자동으로 식별하고, 해당 영역의 응답 생성을 우선시한다. 이는 선호 데이터의 분포 편향을 보정하고 더 균형 잡힌 정렬을 달성한다.
+
+## 종합 비교
+
+| 방법 | 탐색 메커니즘 | 결합 방식 | 주요 장점 |
+|------|------------|---------|---------|
+| 엔트로피 보너스 | 출력 분포 다양성 | 덧셈 | 단순, 범용 |
+| i-MENTOR | 응답 유사도 기반 | 덧셈 | 궤적 다양성 |
+| MERCI | 방문 카운트 기반 | 곱셈 | 희소 영역 탐색 |
+| CDE | 예측 오류 기반 | 덧셈 | 학습 진도 반영 |
+| Curiosity RLHF | 데이터 분포 기반 | 덧셈 | 선호 편향 보정 |
+
+탐색은 RL 학습의 핵심이며, 적절한 탐색 없이는 모델이 지역 최적해에 갇혀 잠재력을 발휘하지 못한다. 내재적 동기는 외재적 보상 설계만으로는 해결하기 어려운 이 문제에 대한 유망한 해법이다.

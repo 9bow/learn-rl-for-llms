@@ -1,0 +1,85 @@
+---
+title: "RLHF의 한계와 도전"
+description: "보상 해킹 사례, 분포 이동, 높은 비용, 인간 주석의 일관성 문제, alignment tax 등 RLHF의 실질적 한계를 학습합니다."
+sidebar:
+  order: 4
+learning_objectives:
+  - "RLHF에서 발생하는 길이 편향과 형식 편향 같은 보상 해킹 사례를 구체적으로 설명할 수 있다"
+  - "분포 이동(distributional shift)이 RLHF 학습 안정성에 미치는 영향을 이해한다"
+  - "alignment tax 개념과 RLHF가 기반 모델 능력에 미치는 영향을 논할 수 있다"
+estimated_minutes: 30
+references:
+  - title: "Open Problems and Fundamental Limitations of Reinforcement Learning from Human Feedback"
+    authors: "Casper, S., Davies, X., Shi, C., Gilbert, T. K., et al."
+    year: 2023
+    url: "https://arxiv.org/abs/2307.15217"
+  - title: "Training language models to follow instructions with human feedback"
+    authors: "Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al."
+    year: 2022
+    url: "https://arxiv.org/abs/2203.02155"
+  - title: "Measuring Goodhart's Law"
+    authors: "Gao, L., Biderman, S., Elazar, Y., et al."
+    year: 2022
+    url: "https://arxiv.org/abs/2210.10760"
+---
+
+## 보상 해킹: 구체적 사례들
+
+RLHF에서 가장 자주 보고되는 실패 패턴은 **보상 해킹** 입니다. 보상 모델이 실제 품질과 상관관계가 높은 표면적 특성을 학습하면, 모델은 실제 품질 향상 없이 그 특성만 극대화하는 방향으로 학습됩니다.
+
+**길이 편향(Length Bias)**: 인간 주석자들은 무의식적으로 더 긴 응답을 더 정보가 풍부하다고 판단하는 경향이 있습니다. 보상 모델이 이 편향을 학습하면, 모델은 실질적 내용 없이 응답을 늘리는 방향으로 최적화됩니다. Ouyang et al. (2022)도 InstructGPT에서 이 현상을 관찰했습니다.
+
+**형식 편향(Format Bias)**: 마크다운 구조, 불릿 포인트, 번호 매기기 등 특정 형식이 더 높은 점수를 받는 경향. 내용과 무관하게 형식만 모방하는 방향으로 학습됩니다.
+
+**아첨 편향(Sycophancy)**: 사용자의 의견에 동조하거나 칭찬하는 응답이 더 높은 평가를 받는 경향. 모델이 사실보다 사용자가 듣고 싶어하는 말을 하는 방향으로 학습됩니다.
+
+**자신감 편향(Confidence Bias)**: 확신에 찬 표현이 더 높은 평가를 받아, 불확실한 사항에 대해서도 단호하게 답하는 경향.
+
+| 편향 유형 | 표면적 특성 | 실제 문제 |
+|----------|------------|----------|
+| 길이 편향 | 더 긴 응답 | 장황함, 핵심 정보 희석 |
+| 형식 편향 | 마크다운, 불릿 | 내용 없는 구조 |
+| 아첨 편향 | 동조, 칭찬 | 사실 왜곡, 독립성 부재 |
+| 자신감 편향 | 단호한 표현 | 부정확한 정보의 확신 |
+
+## 분포 이동 (Distributional Shift)
+
+PPO 학습 과정에서 정책 $\pi_\theta$는 지속적으로 변합니다. 그러나 보상 모델은 SFT 모델이나 초기 정책의 응답으로 학습되었습니다. 정책이 발전할수록 보상 모델이 학습하지 못한 새로운 분포의 응답을 생성하게 되며, 이 영역에서의 보상 모델 예측은 신뢰할 수 없습니다.
+
+Casper et al. (2023)은 이를 RLHF의 근본적 한계 중 하나로 지목했습니다. 분포 이동의 심각성은 KL 발산의 크기와 비례하며, 이것이 KL 페널티가 필수적인 이유 중 하나입니다.
+
+$$\text{신뢰 범위} \propto \frac{1}{\sqrt{D_{KL}(\pi_\theta \| \pi_{ref})}}$$
+
+이 관계는 대략적이지만, KL이 클수록 보상 모델 예측의 신뢰도가 낮아짐을 시사합니다.
+
+## 높은 계산 및 운영 비용
+
+PPO-RLHF의 실질적 도입을 어렵게 만드는 비용 문제:
+
+**메모리 비용**: 4개 모델(Actor, Critic, Reward, Reference) 동시 유지. 70B 모델 기준 약 560GB GPU 메모리 필요.
+
+**계산 비용**: 롤아웃 생성(Actor 추론) + 보상 계산(Reward 추론) + KL 계산(Reference 추론) + PPO 업데이트(Actor, Critic 역전파). SFT 대비 약 3~5배 높은 연산량.
+
+**엔지니어링 복잡성**: 4개 모델의 동기화, 분산 학습 설정, 메모리 최적화 등 고도의 MLOps 역량이 필요합니다.
+
+## 인간 주석의 한계
+
+**주석자 간 불일치(Inter-annotator Disagreement)**: 동일 응답에 대해 주석자마다 다른 선호를 가집니다. Casper et al. (2023)에 따르면, 주석자 간 일치율(agreement rate)은 과제에 따라 60~80% 수준으로, 이 노이즈가 보상 모델의 품질 상한을 제한합니다.
+
+**주석자 편향**: 주석자의 인구 통계적 특성(연령, 성별, 문화권, 교육 수준)이 선호 판단에 영향을 미칩니다. OpenAI의 InstructGPT 주석자 40명은 영어 능통자였으며, 이는 비영어권 문화에 대한 편향을 내포할 수 있습니다.
+
+**전문 지식의 부재**: 의학, 법률, 과학 분야의 사실 정확성 판단에 일반 주석자는 부적합합니다. 전문가 주석자는 비용이 매우 높습니다.
+
+**주석 피로(Annotation Fatigue)**: 장시간 반복적인 비교 작업은 주석 품질을 저하시킵니다.
+
+## Alignment Tax
+
+**Alignment Tax** 는 RLHF로 모델을 정렬했을 때 발생하는 기반 능력(base capability)의 저하를 말합니다. Ouyang et al. (2022)은 InstructGPT가 일부 NLP 벤치마크에서 GPT-3보다 성능이 낮음을 보고했습니다.
+
+이는 RLHF 최적화가 인간 선호에 부합하는 특정 응답 스타일에 수렴하면서, 다양한 과제에서의 일반적 성능이 희생될 수 있음을 의미합니다. Alignment tax를 줄이기 위한 연구로는 PPO 학습 중 SFT 손실을 혼합하거나, LoRA 같은 파라미터 효율적 방법을 사용하는 접근이 있습니다.
+
+## 스케일링의 어려움
+
+RLHF는 모델 크기가 커질수록 더 많은 계산 자원과 더 높은 품질의 보상 모델이 필요합니다. 보상 모델 자체도 정책 모델과 함께 스케일해야 하는 경우가 많으며, 이는 비용을 비선형적으로 증가시킵니다.
+
+Casper et al. (2023)은 36가지 RLHF의 열린 문제를 정리하면서, 보상 모델의 견고성, 주석 품질, 스케일링, 평가 방법론 등을 핵심 미해결 과제로 제시했습니다. 이러한 한계들이 DPO, Constitutional AI, RLAIF 같은 대안적 접근법 개발의 동기가 됩니다.

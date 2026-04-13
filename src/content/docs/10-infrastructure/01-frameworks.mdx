@@ -1,0 +1,118 @@
+---
+title: "RLHF 프레임워크 비교"
+description: "OpenRLHF, veRL, TRL, ROLL 등 주요 RLHF 프레임워크의 아키텍처와 특성을 비교합니다."
+sidebar:
+  order: 1
+learning_objectives:
+  - "OpenRLHF, veRL, TRL의 핵심 아키텍처 차이를 설명할 수 있다"
+  - "각 프레임워크가 지원하는 알고리즘과 분산 전략을 비교할 수 있다"
+  - "프로젝트 요구사항에 맞는 RLHF 프레임워크를 선택할 수 있다"
+estimated_minutes: 30
+references:
+  - title: "OpenRLHF: An Easy-to-use, Scalable and High-performance RLHF Framework"
+    url: "https://arxiv.org/abs/2501.03262"
+  - title: "veRL: Volcano Engine Reinforcement Learning for LLMs"
+    url: "https://github.com/volcengine/verl"
+  - title: "TRL: Transformer Reinforcement Learning"
+    url: "https://github.com/huggingface/trl"
+  - title: "ROLL: Robust Online LLM Reinforcement Learning"
+    url: "https://arxiv.org/abs/2506.06122"
+---
+
+## RLHF 프레임워크 개요
+
+RLHF(Reinforcement Learning from Human Feedback)를 대규모 언어 모델에 적용하려면 분산 학습, 고속 추론, 멀티 모델 조율 등 복잡한 인프라가 필요합니다. 이를 위해 여러 오픈소스 프레임워크가 개발되었으며, 각각 설계 철학과 지원 기능이 다릅니다.
+
+이 장에서는 현재 가장 널리 사용되는 네 가지 프레임워크인 **OpenRLHF**, **veRL**, **TRL**, **ROLL** 을 심층 비교합니다.
+
+## OpenRLHF
+
+OpenRLHF(arXiv:2501.03262, ACL 2025 Demo)는 **Ray** 를 기반으로 하는 분산 RLHF 프레임워크입니다. 사용 편의성과 확장성을 동시에 추구하며 설계되었습니다.
+
+### 핵심 특징
+
+**지원 알고리즘**: PPO, GRPO, DAPO, REINFORCE++, VLM(멀티모달) 등 현재 주요 RLHF/RLVR 알고리즘을 모두 지원합니다.
+
+**분산 전략**: Ray를 활용한 완전 분산 설계로 Actor, Critic, Reward Model, Reference Model을 각각 별도의 Ray 액터로 배치할 수 있습니다. **AutoTP(Automatic Tensor Parallelism)** 를 통해 70B 이상의 파라미터를 가진 모델도 자동으로 텐서 병렬화하여 학습할 수 있습니다.
+
+**vLLM 통합**: 샘플 생성(rollout) 단계에서 vLLM을 활용하여 고속 추론을 구현합니다. 이를 통해 RLHF의 가장 큰 병목인 샘플 생성 속도를 크게 향상시킵니다.
+
+### 아키텍처
+
+```
+Ray Cluster
+├── Actor (Policy Model) — 행동 선택 및 학습
+├── Critic (Value Model) — 가치 추정
+├── Reward Model — 보상 신호 생성
+├── Reference Model — KL 발산 계산용 고정 모델
+└── vLLM Engine — 고속 롤아웃
+```
+
+각 컴포넌트는 독립적인 GPU 그룹에 배치되며, Ray를 통해 통신합니다. 이 설계는 각 모델의 크기와 처리량에 맞게 GPU를 유연하게 할당할 수 있게 합니다.
+
+## veRL
+
+veRL(GitHub: volcengine/verl, EuroSys 2025)은 **HybridFlow** 아키텍처를 기반으로 하는 고성능 RLHF 프레임워크입니다. Volcano Engine(ByteDance)이 개발했습니다.
+
+### HybridFlow 아키텍처
+
+veRL의 핵심 혁신은 **하이브리드 컨트롤러** 설계입니다. RLHF 워크플로우에서 제어 흐름(control flow)과 계산 흐름(data flow)을 분리합니다:
+
+- **Single-controller**: 전체 훈련 루프의 조율을 담당. 유연하고 프로그래밍하기 쉽습니다.
+- **Multi-controller**: 각 모델 내부의 분산 계산을 담당. 최고 성능을 위해 최적화됩니다.
+
+이 분리 덕분에 PPO 알고리즘 전체를 약 **20줄의 파이썬 코드** 로 표현할 수 있으며, 내부적으로는 완전히 최적화된 분산 계산이 실행됩니다.
+
+### 성능
+
+veRL은 기존 단일 컨트롤러 방식 대비 **1.5x~20x 처리량 향상** 을 달성합니다. 671B 파라미터 규모의 모델도 Megatron-LM과 연동하여 학습할 수 있습니다.
+
+**지원 병렬화**: 텐서 병렬(TP), 파이프라인 병렬(PP), 데이터 병렬(DP), 시퀀스 병렬(SP)을 모두 지원하며, Megatron-LM, FSDP, DeepSpeed 백엔드와 호환됩니다.
+
+## TRL (Transformer Reinforcement Learning)
+
+TRL은 **Hugging Face** 에서 개발한 RLHF 풀스택 프레임워크입니다. Hugging Face 생태계와의 완벽한 통합을 목표로 합니다.
+
+### 특징
+
+**지원 알고리즘**: SFT(Supervised Fine-Tuning), GRPO, DPO, PPO, Reward Modeling 등을 하나의 패키지에서 지원합니다. 각 알고리즘은 `SFTTrainer`, `GRPOTrainer`, `DPOTrainer` 등 일관된 API로 제공됩니다.
+
+**분산 전략**: DDP(Data Distributed Parallel), DeepSpeed(ZeRO 1/2/3), FSDP(Fully Sharded Data Parallel)를 네이티브로 지원합니다. HuggingFace `Accelerate` 라이브러리를 통해 단일 GPU부터 수백 GPU 클러스터까지 동일한 코드로 확장됩니다.
+
+**VLM 지원**: GRPO 트레이너에서 Vision-Language Model(VLM)을 지원하여 멀티모달 RLHF 연구가 가능합니다.
+
+**진입 장벽**: 세 프레임워크 중 가장 낮은 진입 장벽을 제공합니다. Hugging Face 모델을 사용하는 연구자라면 몇 줄의 코드 변경만으로 RLHF를 적용할 수 있습니다.
+
+## ROLL
+
+ROLL(Robust Online LLM Reinforcement Learning, arXiv:2506.06122)은 Alibaba Group이 개발한 프레임워크로, **온라인 RLHF의 안정성과 효율성** 에 초점을 맞춥니다.
+
+주요 특징:
+- 비동기 롤아웃과 학습의 파이프라이닝
+- 보상 해킹 완화를 위한 자동 보상 정규화
+- 대규모 온라인 서비스 환경에 적합한 설계
+
+## 프레임워크 기능 비교
+
+| 특성 | OpenRLHF | veRL | TRL | ROLL |
+|------|----------|------|-----|------|
+| **기반 기술** | Ray + vLLM | HybridFlow | Accelerate | 자체 |
+| **주요 알고리즘** | PPO, GRPO, DAPO, REINFORCE++ | PPO, GRPO, DAPO | SFT, PPO, GRPO, DPO | PPO, GRPO |
+| **최대 모델 크기** | 70B+ (AutoTP) | 671B (Megatron) | 수십B (FSDP) | 70B+ |
+| **분산 전략** | Ray Actor | HybridFlow | DDP/DeepSpeed/FSDP | 비동기 파이프라인 |
+| **VLM 지원** | 있음 | 제한적 | 있음 (GRPO) | 제한적 |
+| **사용 편의성** | 중간 | 중간 | 높음 | 중간 |
+| **처리량** | 높음 | 매우 높음 (1.5x-20x) | 중간 | 높음 |
+| **생태계** | 독립적 | ByteDance | Hugging Face | Alibaba |
+
+## 프레임워크 선택 가이드
+
+프레임워크 선택은 다음 기준에 따라 결정됩니다:
+
+**TRL 선택**: Hugging Face 생태계를 이미 사용 중이고, 빠른 프로토타이핑이 목표인 경우. 70B 미만 모델, 표준 알고리즘(PPO, DPO, GRPO)을 사용하는 연구에 적합합니다.
+
+**OpenRLHF 선택**: 다양한 최신 알고리즘(DAPO, REINFORCE++ 등)을 실험하고 싶거나, VLM RLHF를 연구하는 경우. Ray 생태계와의 통합이 필요한 경우에도 적합합니다.
+
+**veRL 선택**: 최고 성능이 요구되고, 100B+ 규모의 모델을 학습하는 경우. Megatron-LM 파이프라인과의 통합이 필요하거나 처리량이 중요한 프로덕션 환경에 적합합니다.
+
+**ROLL 선택**: 온라인 RLHF 파이프라인의 안정성과 강건성이 중요한 경우. 대규모 서비스 환경에서의 지속적인 학습에 적합합니다.

@@ -1,0 +1,90 @@
+---
+title: "IPO, KTO, ORPO — DPO 변형들"
+description: "DPO의 한계를 극복한 IPO, KTO, ORPO 등 주요 변형 알고리즘의 원리와 특징을 비교합니다."
+sidebar:
+  order: 3
+learning_objectives:
+  - "IPO가 DPO의 과적합 문제를 어떻게 해결하는지 이해한다"
+  - "KTO의 이진 피드백 방식과 Kahneman-Tversky 효용 이론의 연결을 설명할 수 있다"
+  - "ORPO가 참조 모델 없이 SFT와 선호 최적화를 동시에 수행하는 원리를 이해한다"
+estimated_minutes: 30
+references:
+  - title: "A General Theoretical Paradigm to Understand Learning from Human Feedback"
+    authors: "Azar, M. G., et al."
+    year: 2024
+    url: "https://arxiv.org/abs/2310.12036"
+  - title: "KTO: Model Alignment as Prospect Theoretic Optimization"
+    authors: "Ethayarajh, K., et al."
+    year: 2024
+    url: "https://arxiv.org/abs/2402.01306"
+  - title: "ORPO: Monolithic Preference Optimization without Reference Model"
+    authors: "Hong, J., et al."
+    year: 2024
+    url: "https://arxiv.org/abs/2403.07691"
+---
+
+## DPO의 한계
+
+DPO는 단순하고 효과적이지만 몇 가지 구조적 한계를 가집니다. 첫째, 데이터가 충분하면 정책이 참조 모델에서 지나치게 멀어지는 **과적합** 경향이 있습니다. 둘째, 쌍대 비교(pairwise comparison) 데이터가 필수이므로 수집 비용이 높습니다. 셋째, 참조 모델을 항상 유지해야 하므로 메모리 비효율이 발생합니다. 이러한 문제를 각자의 방식으로 해결한 변형들이 등장했다.
+
+---
+
+## IPO: Identity Preference Optimization
+
+**IPO** (Azar et al., 2024)는 DPO의 이론적 취약점을 분석하고 이를 수정한 방법입니다. DPO는 BT 모델 가정과 MLE를 결합하는 과정에서 암묵적으로 손실 함수의 포화(saturation) 문제가 발생합니다. 즉, 선호 쌍이 완벽하게 분류될수록 그래디언트가 0에 수렴해 학습이 멈추고, 이미 과적합된 상태에서도 손실이 낮게 유지됩니다.
+
+IPO는 시그모이드 링크 함수를 제거하고 직접적인 회귀 목표를 사용합니다.
+
+$$
+L_{\text{IPO}}(\pi_\theta; \pi_{\text{ref}}) = \mathbb{E}_{(x, y_w, y_l)}\!\left[\left(\log \frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)} - \log \frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)} - \frac{1}{2\beta}\right)^2\right]
+$$
+
+이 손실은 **정책 비율 차이를 $\frac{1}{2\beta}$에 근사** 시키는 회귀 문제로, 과적합 시에도 그래디언트가 계속 존재해 규제(regularization) 효과를 유지합니다.
+
+---
+
+## KTO: Kahneman-Tversky Optimization
+
+**KTO** (Ethayarajh et al., 2024)는 쌍대 비교 데이터 대신 **이진 피드백(binary feedback)** 만으로 학습하는 방법입니다. 각 응답에 대해 "좋다(desirable)" 또는 "나쁘다(undesirable)"라는 단순한 레이블만 있으면 됩니다. 이는 실제 데이터 수집 환경에서 훨씬 자연스럽다.
+
+KTO의 이론적 기반은 **Kahneman-Tversky 전망 이론(Prospect Theory)** 입니다. 인간은 이득(gain)보다 손실(loss)에 더 민감하게 반응하는 비대칭적 효용 함수를 가진다는 이론으로, 노벨 경제학상을 받은 심리학적 발견입니다.
+
+$$
+L_{\text{KTO}}(\pi_\theta; \pi_{\text{ref}}) = \mathbb{E}_{(x, y)}\bigl[w(y)\bigl(\mathbf{1} - v_{\text{KTO}}(\pi_\theta, \pi_{\text{ref}}, x, y)\bigr)\bigr]
+$$
+
+여기서 $v_{\text{KTO}}$는 이득/손실을 시그모이드로 변환한 효용값이고, $w(y)$는 레이블에 따라 다른 가중치를 부여합니다. 중요한 점은 $z_{\text{ref}}$라는 기준값(reference point)을 사용해 응답의 KL 발산을 정규화한다는 것입니다. KTO는 쌍대 데이터 없이도 DPO와 유사하거나 더 나은 성능을 보인다고 보고되었다.
+
+---
+
+## ORPO: Odds-Ratio Preference Optimization
+
+**ORPO** (Hong et al., 2024)는 참조 모델을 완전히 제거하는 동시에 SFT(Supervised Fine-Tuning)와 선호 최적화를 **단일 학습 단계** 로 통합합니다.
+
+ORPO의 핵심은 **오즈 비(Odds Ratio)** 를 이용한 선호 신호 계산입니다.
+
+$$
+\text{OR}(\pi_\theta, y, x) = \frac{\pi_\theta(y|x)}{1 - \pi_\theta(y|x)}
+$$
+
+$$
+L_{\text{ORPO}} = \mathbb{E}\!\left[-\log P_\theta(y_w|x) - \lambda \log \sigma\!\left(\log \frac{\text{OR}(\pi_\theta, y_w, x)}{\text{OR}(\pi_\theta, y_l, x)}\right)\right]
+$$
+
+첫 번째 항은 표준 SFT 손실이고, 두 번째 항은 오즈 비 기반 선호 정렬 손실입니다. 참조 모델이 없으므로 추가 메모리가 필요 없고, 별도의 SFT 단계도 불필요합니다. ORPO는 Llama-3 등 대형 모델에서 DPO 대비 동등하거나 우수한 결과를 보였으며, 훈련 효율성 측면에서 특히 유리합니다.
+
+---
+
+## 종합 비교
+
+| 기준 | DPO | IPO | KTO | ORPO |
+|------|-----|-----|-----|------|
+| 데이터 형식 | 쌍대 (win/lose) | 쌍대 (win/lose) | 이진 (good/bad) | 쌍대 (win/lose) |
+| 참조 모델 | 필요 | 필요 | 필요 | **불필요** |
+| SFT 단계 | 별도 필요 | 별도 필요 | 별도 필요 | **통합** |
+| 과적합 저항성 | 낮음 | **높음** | 중간 | 중간 |
+| 이론적 기반 | BT + MLE | 직접 회귀 | 전망 이론 | 오즈 비 |
+| 구현 복잡도 | 낮음 | 낮음 | 낮음 | 낮음 |
+| 쌍대 비교 필요 여부 | 필요 | 필요 | **불필요** | 필요 |
+
+각 방법은 서로 다른 실용적 제약을 해결합니다. 쌍대 데이터 수집이 어려우면 KTO, 메모리 효율이 중요하면 ORPO, 과적합 제어가 필요하면 IPO가 적합하다. 실제 응용에서는 데이터 가용성과 컴퓨팅 자원에 따라 알고리즘을 선택합니다.

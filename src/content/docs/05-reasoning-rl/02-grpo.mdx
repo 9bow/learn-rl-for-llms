@@ -1,0 +1,84 @@
+---
+title: "GRPO — Group Relative Policy Optimization"
+description: "Critic 모델을 제거하고 그룹 내 상대적 advantage를 계산하는 GRPO의 구조와 수식을 학습합니다."
+sidebar:
+  order: 2
+learning_objectives:
+  - "GRPO가 Critic 모델을 제거하고 그룹 평균으로 advantage를 추정하는 원리를 이해한다"
+  - "GRPO의 advantage 정규화 수식과 클리핑 목표 함수를 해석할 수 있다"
+  - "DeepSeekMath에서 GRPO가 달성한 성능과 그 의미를 설명할 수 있다"
+estimated_minutes: 25
+references:
+  - title: "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models"
+    authors: "Shao, Z., Wang, P., Zhu, Q., Xu, R., Song, J., Bi, X., Zhang, H., Zhang, M., Li, Y., Wu, Y., & Guo, D."
+    year: 2024
+    url: "https://arxiv.org/abs/2402.03300"
+  - title: "DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning"
+    authors: "DeepSeek-AI"
+    year: 2025
+    url: "https://arxiv.org/abs/2501.12948"
+---
+
+## PPO의 Critic 문제
+
+PPO(Proximal Policy Optimization)는 강력한 RL 알고리즘이지만 LLM 훈련에서 실용적 문제가 있다. Advantage를 추정하기 위해 **Critic(가치 함수) 모델** 이 필요하며, 이 모델은 정책 모델과 동일한 크기를 가져야 정확한 추정이 가능하다. 결과적으로 전체 시스템은 정책 모델, 참조 모델, 보상 모델, Critic 모델의 4개 모델을 동시에 메모리에 올려야 한다.
+
+70B 파라미터 모델에서 이는 수백 GB의 GPU 메모리를 요구하며, 대부분의 연구 기관에서 접근하기 어렵다. DeepSeek 팀은 이 문제를 해결하기 위해 **GRPO(Group Relative Policy Optimization)** 를 제안했다.
+
+## GRPO의 핵심 아이디어
+
+GRPO는 Critic 모델을 완전히 제거하고, 대신 **동일 프롬프트에 대해 여러 응답을 샘플링하여 그룹 내 상대적 성능으로 advantage를 추정** 한다.
+
+구체적인 절차:
+1. 프롬프트 $x$에 대해 현재 정책 $\pi_{\theta_{\text{old}}}$에서 $G$개의 응답 $\{y_1, y_2, \ldots, y_G\}$를 샘플링한다.
+2. 각 응답에 대해 보상 $r_i = r(x, y_i)$를 계산한다.
+3. 그룹 내 상대적 advantage를 계산한다.
+
+$$
+\hat{A}_i = \frac{r_i - \text{mean}(\mathbf{r})}{\text{std}(\mathbf{r})}
+$$
+
+여기서 $\mathbf{r} = (r_1, r_2, \ldots, r_G)$는 그룹 내 보상 벡터다. 평균을 빼고 표준편차로 나누는 z-score 정규화로, 그룹 내에서 상대적으로 좋은 응답이 양의 advantage, 나쁜 응답이 음의 advantage를 가진다.
+
+## GRPO 목표 함수
+
+GRPO의 학습 목표는 PPO의 클리핑 목표와 KL 페널티를 결합한다.
+
+$$
+L_{\text{GRPO}}(\theta) = \mathbb{E}_{x, \{y_i\}}\!\left[\frac{1}{G}\sum_{i=1}^{G} \min\!\left(\rho_i \hat{A}_i,\ \text{clip}(\rho_i, 1-\varepsilon, 1+\varepsilon)\hat{A}_i\right) - \beta\, \mathbb{D}_{\mathrm{KL}}[\pi_\theta \| \pi_{\text{ref}}]\right]
+$$
+
+여기서 $\rho_i = \frac{\pi_\theta(y_i|x)}{\pi_{\theta_{\text{old}}}(y_i|x)}$는 중요도 샘플링 비율이고, $\varepsilon$은 클리핑 범위(일반적으로 0.2), $\beta$는 KL 페널티 계수다.
+
+실제 구현에서는 토큰 수준으로 손실을 계산한다.
+
+$$
+L_{\text{GRPO}}(\theta) = \frac{1}{G}\sum_{i=1}^{G}\frac{1}{|y_i|}\sum_{t=1}^{|y_i|} \min\!\left(\rho_{i,t} \hat{A}_i,\ \text{clip}(\rho_{i,t}, 1-\varepsilon, 1+\varepsilon)\hat{A}_i\right)
+$$
+
+## Critic 제거의 이점과 트레이드오프
+
+| 항목 | PPO | GRPO |
+|------|-----|------|
+| 필요 모델 수 | 4개 | 3개 (Critic 제거) |
+| Advantage 추정 방식 | 학습된 가치 함수 | 그룹 평균 |
+| Advantage 추정 정확도 | 높음 (학습된 모델) | 낮음 (샘플 통계) |
+| 메모리 사용량 | 더 많음 | 더 적음 |
+| 구현 복잡도 | 높음 | 중간 |
+| 샘플 효율성 | 높음 | 낮음 (G배 샘플 필요) |
+
+Advantage 추정 정확도는 그룹 크기 $G$에 따라 달라진다. 일반적으로 $G = 4 \sim 16$을 사용하며, 더 큰 $G$는 더 정확한 추정을 제공하지만 계산 비용이 선형으로 증가한다.
+
+## DeepSeekMath에서의 성과
+
+GRPO는 DeepSeekMath (Shao et al., 2024)에서 수학 추론 강화에 처음 적용되었다. DeepSeek-Math-7B 모델에 GRPO를 적용한 결과:
+
+- **MATH 벤치마크**: 51.7% 달성 (GPT-4 수준)
+- **GSM8K**: 88.2% 달성
+- 동일 크기의 다른 오픈소스 모델 대비 현저한 우위
+
+이 결과는 Critic 없이도 RL 기반 추론 강화가 효과적임을 입증했다. 이후 GRPO는 DeepSeek-R1의 핵심 알고리즘으로 채택되어 더 큰 규모에서도 효과를 확인했다.
+
+## GRPO의 이론적 위치
+
+GRPO는 REINFORCE 알고리즘의 변형으로 볼 수 있다. REINFORCE는 보상을 직접 gradient 가중치로 사용하는 단순한 정책 그래디언트 방법이며, GRPO는 여기에 세 가지를 추가한다: (1) 그룹 정규화로 baseline 추정, (2) PPO 스타일 클리핑으로 안정적 업데이트, (3) KL 페널티로 참조 모델 이탈 방지. 이 조합이 Critic 없이도 안정적인 학습을 가능하게 한다.

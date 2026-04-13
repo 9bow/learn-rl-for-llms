@@ -1,0 +1,88 @@
+---
+title: "Process Reward Model vs Outcome Reward Model"
+description: "ORM과 PRM의 구조적 차이, PRM의 장점과 데이터 수집 어려움, 자동 PRM 학습 방법을 학습합니다."
+sidebar:
+  order: 4
+learning_objectives:
+  - "ORM과 PRM의 보상 부여 시점과 그로 인한 학습 신호 차이를 설명할 수 있다"
+  - "PRM의 해석 가능성과 세밀한 피드백이 추론 학습에 주는 이점을 이해한다"
+  - "Monte Carlo 추정을 통한 자동 PRM 학습 방법의 원리를 설명할 수 있다"
+estimated_minutes: 28
+references:
+  - title: "Let's Verify Step by Step"
+    authors: "Lightman, H., Kosaraju, V., Burda, Y., Edwards, H., Baker, B., Lee, T., Leike, J., Schulman, J., Sutskever, I., & Cobbe, K."
+    year: 2023
+    url: "https://arxiv.org/abs/2305.20050"
+  - title: "Math-Shepherd: Verify and Reinforce LLMs Step-by-step without Human Annotations"
+    authors: "Wang, P., et al."
+    year: 2024
+    url: "https://arxiv.org/abs/2312.08935"
+  - title: "Let's Reward Step by Step: Step-Level Reward Model as the Navigators for Reasoning"
+    authors: "Ma, Q., et al."
+    year: 2023
+    url: "https://arxiv.org/abs/2310.10080"
+---
+
+## 보상 모델의 두 가지 패러다임
+
+추론 과제에서 RL을 적용할 때, 언제 어떻게 보상을 부여하느냐는 학습의 질을 결정한다. 이에 따라 두 가지 패러다임이 존재한다.
+
+**ORM(Outcome Reward Model)**: 최종 답변에만 보상을 부여한다. 추론 과정과 무관하게 정답이면 +1, 오답이면 -1(또는 0)이다. 구현이 단순하고, 정답 판별이 가능한 모든 도메인에 적용 가능하다.
+
+**PRM(Process Reward Model)**: 각 추론 단계마다 보상을 부여한다. 올바른 추론 단계는 양의 보상, 잘못된 단계는 음의 보상을 받는다. 최종 답이 틀려도 초기 단계가 올바르면 부분 보상을 받는다.
+
+## PRM의 이론적 장점
+
+PRM이 ORM보다 이론적으로 우월한 이유는 **credit assignment 문제** 에 있다.
+
+ORM은 긴 추론 체인에서 어느 단계에서 실수가 발생했는지 알 수 없다. 예컨대 10단계 추론에서 7단계에 오류가 있어 최종 답이 틀렸다면, ORM은 10개 단계 모두에 동일한 음의 보상을 부여한다. 1~6단계의 올바른 추론도 페널티를 받는 셈이다.
+
+PRM은 단계별 보상으로 이 문제를 해결한다.
+
+$$
+R_{\text{PRM}}(x, y) = \sum_{k=1}^{K} r_k(x, y_{1:k})
+$$
+
+여기서 $r_k$는 $k$번째 추론 단계의 보상이고, $K$는 총 단계 수다. 이로 인해:
+
+- **해석 가능성**: 어느 단계에서 추론이 잘못되었는지 식별 가능
+- **세밀한 피드백**: 부분적으로 올바른 추론에도 보상 제공
+- **오류 위치 식별**: 디버깅과 데이터 품질 향상에 활용 가능
+
+## PRM 데이터 수집의 어려움
+
+PRM의 가장 큰 실용적 장벽은 **단계별 주석(step-level annotation)** 의 비용이다. ORM은 최종 답의 정오만 판별하면 되므로 자동화가 쉽다. 반면 PRM은 각 추론 단계가 올바른지 인간이 판단해야 한다.
+
+Lightman et al. (2023)의 "Let's Verify Step by Step"은 OpenAI가 수학 문제 풀이 단계에 대해 수작업으로 주석을 달아 PRM800K 데이터셋을 구축했다. 이는 약 800,000개의 단계별 레이블로, 수십 명의 주석가가 수개월 작업한 결과다. 이런 규모의 데이터 구축은 대부분의 조직에서 불가능하다.
+
+## 자동 PRM 학습: Monte Carlo 추정
+
+수작업 주석 없이 PRM을 학습하는 방법 중 가장 확립된 것은 **Monte Carlo(MC) 추정** 이다.
+
+각 중간 단계 $y_{1:k}$에서 학습된 모델(또는 강력한 모델)이 나머지 추론 $y_{k+1:K}$를 여러 번 완성한다. 완성된 시도 중 최종 정답에 도달한 비율이 단계 $k$의 보상 추정값이 된다.
+
+$$
+\hat{r}_k = \frac{\text{정답에 도달한 완성 수}}{\text{총 완성 시도 수}}
+$$
+
+이 방법을 사용한 **Math-Shepherd** (Wang et al., 2024)는 수작업 PRM과 유사한 성능을 보였다. 계산 비용은 높지만 인간 주석 비용보다 훨씬 저렴하다.
+
+## Process Supervision의 스케일링 이점
+
+Lightman et al.의 연구에서 주목할 결과는 **PRM의 스케일링 이점** 이다. Best-of-N 샘플링에서 PRM 검증기를 사용하면 ORM 검증기 대비 동일 성능을 훨씬 적은 샘플로 달성할 수 있다.
+
+| 검증 방법 | MATH에서 90% 정확도 달성에 필요한 샘플 수 |
+|---------|--------------------------------|
+| 다수결 투표 (ORM 없음) | ~1000개 |
+| ORM 검증 | ~400개 |
+| PRM 검증 | ~100개 |
+
+이는 PRM이 테스트 타임 계산 확장에서 특히 효율적임을 보여준다.
+
+## OpenPRM과 R-PRM
+
+**OpenPRM** (ICLR 2025): 오픈소스 PRM 학습 파이프라인으로, MC 추정 기반 자동 데이터 생성과 PRM 학습을 통합했다. 다양한 수학 데이터셋에서 학습된 범용 PRM을 공개했다.
+
+**R-PRM** (EMNLP 2025): 참조 정책을 활용한 PRM으로, 단계별 보상의 분산을 줄이고 더 안정적인 학습을 가능하게 한다.
+
+ORM과 PRM은 상호 배타적이 아니며, 많은 현대 시스템에서 ORM으로 최종 정답을 검증하고 PRM으로 추론 경로를 안내하는 하이브리드 방식을 채택한다.

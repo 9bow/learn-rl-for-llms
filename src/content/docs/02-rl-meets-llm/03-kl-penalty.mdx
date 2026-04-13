@@ -1,0 +1,107 @@
+---
+title: "KL 페널티와 레퍼런스 모델"
+description: "KL Divergence의 역할, 분포 붕괴 방지, 레퍼런스 모델 설계, β 파라미터의 트레이드오프를 학습합니다."
+sidebar:
+  order: 3
+learning_objectives:
+  - "KL Divergence의 수학적 정의와 비대칭성을 설명할 수 있다"
+  - "레퍼런스 모델이 RLHF에서 필요한 이유와 분포 붕괴 방지 메커니즘을 이해한다"
+  - "β 파라미터의 트레이드오프를 정량적으로 설명하고 적절한 값을 선택하는 기준을 논할 수 있다"
+estimated_minutes: 30
+references:
+  - title: "Training language models to follow instructions with human feedback"
+    authors: "Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al."
+    year: 2022
+    url: "https://arxiv.org/abs/2203.02155"
+  - title: "Fine-Tuning Language Models from Human Preferences"
+    authors: "Ziegler, D. M., Stiennon, N., Wu, J., Brown, T. B., Radford, A., et al."
+    year: 2019
+    url: "https://arxiv.org/abs/1909.08593"
+  - title: "Measuring Goodhart's Law"
+    authors: "Gao, L., Biderman, S., Elazar, Y., Blakey, D., et al."
+    year: 2022
+    url: "https://arxiv.org/abs/2210.10760"
+  - title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model"
+    authors: "Rafailov, R., Sharma, A., Mitchell, E., Manning, C. D., Ermon, S., & Finn, C."
+    year: 2023
+    url: "https://arxiv.org/abs/2305.18290"
+---
+
+## KL Divergence 개요
+
+**쿨백-라이블러 발산(Kullback-Leibler Divergence, KL Divergence)** 은 두 확률 분포 사이의 "거리"를 측정하는 정보이론적 척도입니다. 두 분포 $P$와 $Q$에 대해:
+
+$$D_{KL}(P \| Q) = \sum_{x} P(x) \log \frac{P(x)}{Q(x)} = \mathbb{E}_{x \sim P}\left[\log \frac{P(x)}{Q(x)}\right]$$
+
+KL Divergence의 핵심 성질:
+
+- **비음수성**: $D_{KL}(P \| Q) \geq 0$, 등호는 $P = Q$일 때만 성립 (깁스 부등식)
+- **비대칭성**: $D_{KL}(P \| Q) \neq D_{KL}(Q \| P)$ (일반적으로)
+- **방향성**: $D_{KL}(\pi_\theta \| \pi_{ref})$는 정책 $\pi_\theta$가 레퍼런스 $\pi_{ref}$에서 얼마나 벗어났는지를 측정
+
+RLHF에서는 $D_{KL}(\pi_\theta \| \pi_{ref})$가 사용됩니다. 이는 학습 정책 $\pi_\theta$의 관점에서 레퍼런스 모델 $\pi_{ref}$과의 차이를 측정합니다.
+
+## 레퍼런스 모델의 역할
+
+**레퍼런스 모델(Reference Model)** $\pi_{ref}$은 RLHF 파이프라인에서 SFT 단계를 완료한 모델입니다. 학습 과정에서 고정(frozen)되어 있으며, 현재 학습 중인 정책 $\pi_\theta$의 "닻(anchor)" 역할을 합니다.
+
+레퍼런스 모델이 필요한 근본적 이유는 **보상 해킹 방지** 입니다. 보상 모델 $r_\phi$는 학습 분포에서는 잘 작동하지만, 분포를 크게 벗어난 입력에서는 신뢰할 수 없습니다. KL 페널티 없이 $r_\phi$만을 최대화하면 다음과 같은 현상이 발생합니다:
+
+- **모드 붕괴(Mode Collapse)**: 보상이 높은 몇 가지 응답 패턴으로 수렴
+- **분포 붕괴(Distribution Collapse)**: 원래 언어 모델의 다양성과 유창성 상실
+- **보상 해킹**: 의미 없는 토큰 반복이나 특정 형식으로 보상 모델을 속임
+
+## KL 페널티가 포함된 보상 함수
+
+RLHF의 실제 최적화 목표는 순수 보상 최대화가 아닌, KL 페널티를 포함한 복합 목표입니다:
+
+$$r(x, y) = r_\phi(x, y) - \beta \cdot D_{KL}\left(\pi_\theta(\cdot \mid x) \| \pi_{ref}(\cdot \mid x)\right)$$
+
+토큰 수준으로 확장하면, 시간 $t$에서의 보상은:
+
+$$r_t = \begin{cases} r_\phi(x, y) - \beta \log \frac{\pi_\theta(y_t \mid x, y_{<t})}{\pi_{ref}(y_t \mid x, y_{<t})} & t = T \\ -\beta \log \frac{\pi_\theta(y_t \mid x, y_{<t})}{\pi_{ref}(y_t \mid x, y_{<t})} & t < T \end{cases}$$
+
+여기서 $\beta \log \frac{\pi_\theta}{\pi_{ref}}$항은 각 토큰에서 현재 정책이 레퍼런스에서 얼마나 벗어났는지를 패널티로 부여합니다.
+
+## β 파라미터의 트레이드오프
+
+$\beta$는 보상 최대화와 레퍼런스 모델 유지 사이의 균형을 조절하는 핵심 하이퍼파라미터입니다:
+
+| $\beta$ 값 | 효과 | 위험 |
+|-----------|------|------|
+| $\beta \to 0$ | 보상 최대화에 집중 | 보상 해킹, 분포 붕괴 |
+| $\beta$ 작음 (0.01~0.1) | 적극적인 정책 업데이트 | 불안정성 증가 |
+| $\beta$ 중간 (0.1~0.5) | 균형 잡힌 학습 | 대부분의 실제 설정 |
+| $\beta$ 큼 (>1) | 레퍼런스에 가깝게 유지 | 보상 개선이 미미 |
+| $\beta \to \infty$ | $\pi_\theta = \pi_{ref}$ | 학습 효과 없음 |
+
+Ouyang et al. (2022)의 InstructGPT에서는 $\beta = 0.2$를 사용했으며, Ziegler et al. (2019)에서는 작업에 따라 $\beta \in [0.1, 0.5]$ 범위를 탐색했습니다.
+
+## Gao et al. (2022)의 실증 분석
+
+Gao et al. (2022)은 KL 발산과 보상 모델 점수, 실제 인간 선호 사이의 관계를 정량적으로 분석했습니다. 핵심 발견:
+
+$$\text{Gold reward} \approx \alpha \cdot r_{proxy} - \beta \cdot D_{KL}(\pi_\theta \| \pi_{ref})$$
+
+보상 모델 점수(대리 보상)는 KL 발산이 증가할수록 실제 인간 선호(골드 보상)와 점점 괴리됩니다. 특히 KL이 약 10~20 nats를 넘으면 대리 보상이 높아도 실제 선호는 오히려 하락하는 **over-optimization** 현상이 명확히 나타났습니다.
+
+## KL 페널티가 없을 때의 실패 사례
+
+실제 실험에서 KL 페널티 없이 RLHF를 적용할 경우 나타나는 전형적인 실패 패턴:
+
+1. **반복 패턴**: "저는 도움을 드릴 수 있습니다. 저는 도움을 드릴 수 있습니다..."처럼 동일 문장을 반복
+2. **과도한 아첨**: "정말 훌륭한 질문입니다!"와 같은 문장을 모든 응답에 삽입
+3. **길이 폭발**: 보상 모델이 길이에 편향된 경우, 응답이 비정상적으로 길어짐
+4. **의미 없는 토큰**: 보상 모델이 특정 패턴에 과적합된 경우, 해당 패턴을 반복 생성
+
+## DPO에서의 KL 해석
+
+Rafailov et al. (2023)의 DPO(Direct Preference Optimization)는 KL 제약 최적화 문제의 닫힌 형태 해(closed-form solution)를 도출하여, 보상 모델 없이 직접 정책을 학습합니다. DPO의 이론적 기반은 KL 제약 RL의 최적 정책이:
+
+$$\pi^*(y \mid x) = \frac{1}{Z(x)} \pi_{ref}(y \mid x) \exp\left(\frac{1}{\beta} r(x, y)\right)$$
+
+임을 보이며, 이로부터 보상 함수를 정책 비율로 표현합니다:
+
+$$r(x, y) = \beta \log \frac{\pi^*(y \mid x)}{\pi_{ref}(y \mid x)} + \beta \log Z(x)$$
+
+KL 페널티는 RLHF의 실용적 안정화 도구일 뿐 아니라, 정책 최적화의 이론적 구조를 형성하는 핵심 요소입니다.

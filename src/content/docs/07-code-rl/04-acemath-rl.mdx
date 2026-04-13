@@ -1,0 +1,131 @@
+---
+title: "AceMath-RL — 수학 추론 모델의 순수 RL"
+description: "NVIDIA AceMath-RL-Nemotron-7B와 DeepSeekMath-V2 — 순수 강화학습으로 달성한 수학 추론의 최전선"
+sidebar:
+  order: 4
+learning_objectives:
+  - AceMath-RL-Nemotron-7B가 보상 모델 없이 순수 RL만으로 높은 수학 추론 성능을 달성하는 방식을 설명할 수 있다
+  - 검증 가능한 보상(verifiable reward)의 개념과 수학 도메인에서의 구현 방식을 이해한다
+  - DeepSeekMath-V2의 LLM 기반 검증기 접근법과 IMO 2025 금메달 성과의 의미를 분석할 수 있다
+estimated_minutes: 30
+references:
+  - title: "AceMath-RL-Nemotron: Advancing Math Reasoning with Reinforcement Learning"
+    url: "https://arxiv.org/abs/2502.01652"
+  - title: "DeepSeekMath-V2: Pushing the Limits of Mathematical Reasoning in Open Language Models"
+    url: "https://arxiv.org/abs/2511.22570"
+  - title: "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models"
+    url: "https://arxiv.org/abs/2402.03300"
+  - title: "Let's Verify Step by Step"
+    url: "https://arxiv.org/abs/2305.20050"
+---
+
+## 순수 RL 패러다임의 등장
+
+2024년 말부터 수학 추론 분야에서 중요한 패러다임 전환이 일어났다. 기존에는 대규모 지도학습 데이터, 정교한 보상 모델, 복잡한 RLHF 파이프라인이 필요하다고 여겨졌다. 그러나 **순수 RL(pure RL)** — 검증 가능한 보상만을 사용하는 강화학습 — 이 이러한 복잡성 없이도 최고 수준의 성능을 달성할 수 있음이 밝혀졌다.
+
+핵심 아이디어는 단순하다. 수학 문제의 정답은 **결정론적으로 검증 가능** 하다. $x = 42$ 인지 아닌지는 외부 판단자 없이 자동으로 확인할 수 있습니다. 이 속성을 활용하면 인간 피드백이나 학습된 보상 모델 없이도 강력한 RL 훈련이 가능합니다.
+
+$$r(c, y^*) = \begin{cases} +1 & \text{if } \text{verify}(c, y^*) = \text{True} \\ -1 & \text{otherwise} \end{cases}$$
+
+여기서 $y^*$ 는 정답이고 $c$ 는 모델의 출력입니다. $\text{verify}$ 함수는 수식 동치 판별기(symbolic equivalence checker)다.
+
+## AceMath-RL-Nemotron-7B
+
+NVIDIA의 **AceMath-RL-Nemotron-7B** (2025)는 7B 파라미터 모델로 순수 RL 훈련만을 통해 달성한 수학 추론 성능의 새로운 기준점을 세웠다.
+
+### 핵심 성과
+
+| 벤치마크 | GPT-4o | Qwen2.5-Math-72B | AceMath-RL-7B |
+|---------|--------|-----------------|---------------|
+| AIME 2024 | 13.3% | 50.0% | **69.0%** |
+| AIME 2025 | 19.7% | 44.4% | **53.6%** |
+| AMC 2023 | 72.5% | 88.5% | **91.2%** |
+| MATH-500 | 74.6% | 90.2% | **92.4%** |
+
+7B 모델이 72B 모델을 크게 초과하고, AIME 2024에서 69%라는 수치는 탑 고교 수학 경시대회 참가자 수준에 해당합니다.
+
+### 학습 전략
+
+AceMath-RL의 훈련은 세 단계로 구성됩니다.
+
+**1단계: 기반 모델 준비**
+
+수학 관련 텍스트로 사전훈련된 모델에서 출발합니다. NVIDIA는 Nemotron 계열 모델을 기반으로 수학 코퍼스로 추가 사전훈련을 수행했다.
+
+**2단계: 콜드 스타트 SFT**
+
+완전한 RL 훈련 전에 소량의 Chain-of-Thought 데이터로 지도학습을 수행하여 모델이 추론 형식을 학습하도록 합니다. 이는 RL 탐색 공간을 좁혀 훈련 안정성을 높입니다.
+
+**3단계: 순수 RL 훈련 (핵심)**
+
+이 단계에서는 어떤 외부 보상 모델도 사용하지 않는다. 검증 가능한 수학 문제와 자동 검증기만으로 훈련합니다.
+
+$$\mathcal{L}_{RL} = -\mathbb{E}_{\tau \sim \pi_\theta}[r(\tau)] + \beta D_{KL}(\pi_\theta \| \pi_{ref})$$
+
+### 데이터 구성
+
+AceMath-RL의 훈련 데이터는 다음 기준으로 선별됩니다.
+
+- **검증 가능성**: 자동으로 정오를 판별할 수 있는 문제만 포함
+- **난이도 분포**: AMC, AIME, Olympiad 수준의 도전적 문제 포함
+- **다양성**: 대수, 기하, 정수론, 조합론 등 균형 있는 주제 분포
+- **오염 방지**: 테스트 세트와 중복되는 문제 제거
+
+### 7B 모델 성과의 의미
+
+7B 파라미터 모델이 72B 이상의 모델을 능가한다는 사실은 **스케일보다 학습 방법** 이 중요할 수 있음을 시사합니다. 이는 Chinchilla 법칙 이후 또 다른 패러다임 전환의 신호로 해석됩니다. 순수 RL로 학습된 소형 모델이 대규모 지도학습 모델을 능가하는 현상은 "Emergent RL Scaling"이라 불린다.
+
+## DeepSeekMath-V2
+
+**DeepSeekMath-V2** (DeepSeek-AI, 2025)는 수학 추론을 더욱 극단적인 수준으로 끌어올린 시스템입니다.
+
+### LLM 기반 검증기
+
+DeepSeekMath-V2의 핵심 혁신은 **LLM 자체를 검증기로 활용** 한다는 점입니다. 수학 정리 증명에서는 단순한 수치 비교로 정오를 판별하기 어렵습니다. 복잡한 증명의 논리적 타당성을 검증하려면 다른 강력한 LLM이 필요합니다.
+
+$$r_{verify}(proof) = \text{LLM-Verifier}(proof, \text{theorem})$$
+
+이 검증기 LLM은 별도로 수학 증명 검증을 위해 훈련된 전문 모델입니다.
+
+### IMO 2025 금메달
+
+DeepSeekMath-V2는 **2025년 국제수학올림피아드(IMO)** 에서 금메달 수준의 성과를 달성했다. IMO는 세계 최고 수준의 수학 경시대회로, 6개 문제를 48시간 내에 풀어야 합니다. 이 성과는 AI가 처음으로 인간 최고 수준의 수학적 창의성에 도달했음을 의미합니다.
+
+### Putnam 2024 성과
+
+Putnam 대회는 북미 대학생 수학 경시대회로, 역사적으로 매우 어렵기로 유명하다. DeepSeekMath-V2는 **120점 만점에 118점** 을 달성하여 역대 최고 수준의 성과를 기록했다. 평균 점수가 한 자릿수인 대회에서 이 성과는 전례 없는 수준입니다.
+
+### 아키텍처 특징
+
+| 구성 요소 | 세부 내용 |
+|---------|---------|
+| 기반 모델 | DeepSeek-V3 기반 |
+| 검증기 | 전문 LLM 검증기 |
+| 형식화 언어 | Lean 4 통합 (선택적) |
+| 추론 체계 | 장문 Chain-of-Thought |
+| RL 알고리즘 | 변형 GRPO |
+| 훈련 데이터 | 고품질 수학 문제 + 증명 |
+
+## 순수 RL의 성공 요인 분석
+
+AceMath-RL과 DeepSeekMath-V2의 성공은 다음 요인들에 기인합니다.
+
+**1. 검증 가능성의 활용**
+
+수학은 자연어와 달리 정오가 명확하다. 이 속성이 보상 모델 없는 RL을 가능하게 합니다.
+
+**2. 충분한 탐색**
+
+긴 Chain-of-Thought 생성을 허용함으로써 모델이 다양한 풀이 경로를 탐색합니다. 이는 RL의 탐색-활용 균형에서 탐색을 충분히 허용하는 효과다.
+
+**3. 분포 내 난이도 커리큘럼**
+
+쉬운 문제에서 어려운 문제로 점진적으로 학습 분포를 이동시키는 커리큘럼이 훈련 안정성에 기여합니다.
+
+**4. KL 발산 제어**
+
+기반 모델에서 너무 벗어나지 않도록 KL 정규화를 적용함으로써 언어 유창성을 유지합니다.
+
+## 정리
+
+AceMath-RL-Nemotron-7B와 DeepSeekMath-V2는 수학 추론에서 순수 RL의 파괴적 가능성을 입증했다. 보상 모델 없이 검증 가능한 보상만으로 인간 최고 수준에 도달한 이 성과들은, 적절한 도메인에서의 RL이 단순히 "보조 기법"이 아닌 **핵심 훈련 패러다임** 이 될 수 있음을 보여줍니다. 특히 7B 모델이 72B 이상을 능가한다는 사실은 스케일 경쟁의 패러다임에 근본적인 질문을 던집니다.

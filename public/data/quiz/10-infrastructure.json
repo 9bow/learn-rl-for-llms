@@ -1,0 +1,146 @@
+[
+  {
+    "id": "q1",
+    "question": "OpenRLHF(arXiv:2501.03262)가 70B+ 파라미터 모델을 학습할 수 있는 핵심 기술은?",
+    "options": [
+      "Ray 기반 분산 아키텍처와 AutoTP(Automatic Tensor Parallelism)",
+      "단일 GPU에서 분할 처리",
+      "모델 가중치를 압축하여 메모리를 절약",
+      "CPU에서 일부 계산을 수행"
+    ],
+    "answer": 0,
+    "explanation": "OpenRLHF는 Ray를 활용하여 Actor, Critic, Reward Model, Reference Model을 별도 GPU 그룹에 배치하고, AutoTP로 70B+ 모델을 자동으로 텐서 병렬화합니다."
+  },
+  {
+    "id": "q2",
+    "question": "veRL(EuroSys 2025)의 HybridFlow 아키텍처의 핵심 혁신은?",
+    "options": [
+      "GPU와 CPU를 동시에 사용한다",
+      "제어 흐름(single-controller)과 계산 흐름(multi-controller)을 분리하여 유연성과 성능을 동시에 달성한다",
+      "모든 계산을 단일 프로세스에서 수행한다",
+      "새로운 신경망 아키텍처를 도입한다"
+    ],
+    "answer": 1,
+    "explanation": "HybridFlow는 RLHF 알고리즘 로직을 single-controller로 표현하고, 분산 계산은 multi-controller로 처리합니다. PPO 전체를 ~20줄로 표현하면서 내부적으로 최적화된 분산 계산을 실행합니다."
+  },
+  {
+    "id": "q3",
+    "question": "TRL(Transformer Reinforcement Learning)의 주요 장점은?",
+    "options": [
+      "가장 높은 처리량을 제공한다",
+      "671B 파라미터 모델을 학습할 수 있다",
+      "Hugging Face 생태계와 완벽히 통합되어 낮은 진입 장벽으로 SFT/GRPO/DPO/PPO를 지원한다",
+      "오픈소스가 아닌 상업용 프레임워크이다"
+    ],
+    "answer": 2,
+    "explanation": "TRL은 HuggingFace Accelerate와 통합되어 SFTTrainer, GRPOTrainer, DPOTrainer 등 일관된 API를 제공합니다. 이미 HuggingFace를 사용하는 연구자에게 가장 접근하기 쉽습니다."
+  },
+  {
+    "id": "q4",
+    "question": "RLHF에서 롤아웃(rollout) 단계가 전체 훈련 시간의 약 80%를 차지하는 이유는?",
+    "options": [
+      "보상 모델 계산이 느리기 때문에",
+      "그래디언트 계산이 복잡하기 때문에",
+      "데이터 로딩이 느리기 때문에",
+      "언어 모델의 자기회귀 토큰 생성이 순차적이어서 GPU 병렬 연산을 충분히 활용하지 못하기 때문에"
+    ],
+    "answer": 3,
+    "explanation": "자기회귀 생성은 토큰 t를 생성하기 위해 1~t-1 토큰이 먼저 완료되어야 하는 순차적 과정입니다. 이는 GPU의 대규모 병렬 처리 능력을 충분히 활용하지 못하게 합니다."
+  },
+  {
+    "id": "q5",
+    "question": "vLLM의 PagedAttention이 RLHF 롤아웃 성능을 향상시키는 메커니즘은?",
+    "options": [
+      "KV 캐시를 페이지 방식으로 관리하여 메모리 단편화를 줄이고 더 많은 동시 시퀀스를 처리한다",
+      "GPU 클럭 속도를 높인다",
+      "모델 가중치를 압축한다",
+      "CPU 메모리를 GPU 메모리로 이전한다"
+    ],
+    "answer": 0,
+    "explanation": "PagedAttention은 운영체제의 가상 메모리처럼 KV 캐시를 고정 크기 블록으로 관리합니다. 메모리 낭비를 줄여 동일 메모리로 더 많은 시퀀스를 동시에 처리하고, 연속 배치를 가능하게 합니다."
+  },
+  {
+    "id": "q6",
+    "question": "Asymmetric PPO(arXiv:2510.01656)의 핵심 아이디어는?",
+    "options": [
+      "Actor와 Critic의 학습률을 다르게 설정한다",
+      "큰 Actor(예: 70B)와 작은 Critic(예: 7B)을 조합하여 Critic 메모리를 절감하면서 학습 효율을 높인다",
+      "Actor를 여러 개 사용한다",
+      "Critic 없이 Actor만 사용한다"
+    ],
+    "answer": 1,
+    "explanation": "Asymmetric PPO는 Actor보다 훨씬 작은 Critic을 사용합니다. Critic은 가치 추정만 담당하므로 Actor와 같은 크기일 필요가 없으며, 작은 Critic은 메모리와 계산 비용을 크게 줄입니다."
+  },
+  {
+    "id": "q7",
+    "question": "Best-of-N 샘플링에서 N이 2배 증가할 때 성능 향상의 특성은?",
+    "options": [
+      "성능이 2배 향상된다",
+      "N과 무관하게 일정하다",
+      "성능 향상이 로그 스케일(log scale)로 체감한다 — 처음에는 효과적이지만 N이 클수록 수익이 줄어든다",
+      "N이 클수록 성능이 급격히 향상된다"
+    ],
+    "answer": 2,
+    "explanation": "BoN 이론에서 E[max_N r] ≈ μ + σ√(2 ln N)로, 성능 향상이 √(ln N)에 비례합니다. N을 4에서 16으로 늘려도 비용은 4배이지만 성능 향상은 상대적으로 작습니다."
+  },
+  {
+    "id": "q8",
+    "question": "MBR-BoN(arXiv:2404.01054)이 표준 BoN보다 보상 해킹에 강한 이유는?",
+    "options": [
+      "더 많은 샘플을 생성하기 때문에",
+      "더 큰 보상 모델을 사용하기 때문에",
+      "MBR-BoN은 보상 모델을 사용하지 않기 때문에",
+      "보상 점수와 함께 다른 샘플들과의 근접성(유사도)을 고려하여 이상치 응답을 자연스럽게 걸러내기 때문에"
+    ],
+    "answer": 3,
+    "explanation": "MBR-BoN은 보상 점수와 군집 중심까지의 거리를 함께 고려합니다. 보상 해킹 응답은 다른 응답들과 크게 달라 이상치로 걸러지고, 진정으로 좋은 응답은 보상도 높고 군집에도 가깝습니다."
+  },
+  {
+    "id": "q9",
+    "question": "SWIFT(arXiv:2505.12225)가 EurusRM-7B와 비슷한 성능을 내면서 사용하는 파라미터 비율은?",
+    "options": [
+      "전체의 0.005%",
+      "전체의 50%",
+      "전체의 10%",
+      "전체의 1%"
+    ],
+    "answer": 0,
+    "explanation": "SWIFT는 LLM 은닉 상태 위에 전체 파라미터의 0.005%에 해당하는 소형 프로브만 추가하여 EurusRM-7B 수준의 보상 신호를 추출합니다. MATH에서 12.7% 정확도 향상을 달성했습니다."
+  },
+  {
+    "id": "q10",
+    "question": "텐서 병렬(TP), 파이프라인 병렬(PP), 데이터 병렬(DP) 중 RLHF의 소형 Reward Model에 가장 적합한 전략은?",
+    "options": [
+      "텐서 병렬 (TP)",
+      "데이터 병렬 (DP)",
+      "파이프라인 병렬 (PP)",
+      "세 가지를 동등하게 사용"
+    ],
+    "answer": 1,
+    "explanation": "소형 보상 모델(7B-13B)은 단일 GPU에 맞는 크기이므로, 처리량을 높이기 위해 여러 GPU 복사본을 두는 데이터 병렬이 가장 효율적입니다."
+  },
+  {
+    "id": "q11",
+    "question": "ROLL(arXiv:2506.06122)이 집중하는 문제는?",
+    "options": [
+      "초대형 모델의 사전 훈련",
+      "VLM 특화 정렬",
+      "온라인 RLHF 파이프라인의 안정성과 강건성",
+      "코드 생성 최적화"
+    ],
+    "answer": 2,
+    "explanation": "ROLL(Robust Online LLM Reinforcement Learning)은 Alibaba가 개발한 프레임워크로, 대규모 온라인 서비스 환경에서의 RLHF 파이프라인 안정성과 강건성에 초점을 맞춥니다."
+  },
+  {
+    "id": "q12",
+    "question": "비동기 롤아웃(async rollout)이 동기 방식보다 빠른 이유와 주의점은?",
+    "options": [
+      "비동기는 더 많은 GPU를 사용하기 때문에 빠르고, 주의점은 없다",
+      "비동기는 항상 더 나쁜 결과를 낸다",
+      "비동기와 동기의 차이는 없다",
+      "롤아웃과 업데이트를 동시에 진행하여 처리량이 높아지지만, 업데이트된 정책과 샘플 생성 정책 간의 차이(stale data)가 학습 불안정을 야기할 수 있다"
+    ],
+    "answer": 3,
+    "explanation": "비동기 방식은 롤아웃 워커와 업데이트 워커가 병렬로 동작하여 처리량을 높입니다. 단, 'stale' 데이터 문제(오래된 정책으로 생성된 샘플)로 인한 학습 불안정 리스크를 관리해야 합니다."
+  }
+]

@@ -1,0 +1,146 @@
+[
+  {
+    "id": "q1",
+    "question": "GRPO(Group Relative Policy Optimization)가 PPO와 다른 핵심 차이는?",
+    "options": [
+      "GRPO는 Critic 모델 없이 그룹 내 샘플들의 상대적 보상으로 어드밴티지를 추정한다",
+      "GRPO는 더 큰 배치 크기를 사용한다",
+      "GRPO는 KL 발산을 사용하지 않는다",
+      "GRPO는 오프라인 데이터만 사용한다"
+    ],
+    "answer": 0,
+    "explanation": "GRPO는 별도의 Critic 모델 없이, 동일 프롬프트에서 생성한 G개의 샘플 내에서 상대적 보상으로 어드밴티지를 계산합니다: A_i = (r_i - mean(r)) / std(r)."
+  },
+  {
+    "id": "q2",
+    "question": "Chain-of-Thought(CoT) 프롬프팅과 RL 기반 추론 훈련의 핵심 차이는?",
+    "options": [
+      "CoT는 추론 단계를 생성하고, RL은 최종 답만 생성한다",
+      "CoT는 프롬프트 엔지니어링이고, RL 훈련은 모델 가중치를 직접 업데이트하여 추론 능력을 내재화한다",
+      "CoT는 더 많은 계산이 필요하고, RL은 더 빠르다",
+      "두 방법은 동일한 메커니즘을 사용한다"
+    ],
+    "answer": 1,
+    "explanation": "CoT는 프롬프트로 추론 패턴을 유도하지만 모델 가중치를 변경하지 않습니다. RL 훈련은 올바른 추론 과정을 보상하여 모델이 자율적으로 추론 전략을 학습하도록 가중치를 업데이트합니다."
+  },
+  {
+    "id": "q3",
+    "question": "DAPO(Decoupled Clip and Dynamic Sampling Policy Optimization)가 도입한 두 가지 핵심 기법은?",
+    "options": [
+      "적응적 학습률과 동적 배치 크기",
+      "어드밴티지 정규화와 보상 스케일링",
+      "클리핑 범위의 분리(상한/하한 독립 설정)와 동적 샘플링(낮은 엔트로피 프롬프트 제거)",
+      "참조 모델 제거와 그룹 크기 증가"
+    ],
+    "answer": 2,
+    "explanation": "DAPO는 clip_high와 clip_low를 독립적으로 설정(Decoupled Clip)하고, 모든 샘플이 동일한 답을 내는 저엔트로피 프롬프트를 학습에서 제외(Dynamic Sampling)합니다."
+  },
+  {
+    "id": "q4",
+    "question": "PRM(Process Reward Model)이 ORM(Outcome Reward Model)보다 추론 학습에 유리한 이유는?",
+    "options": [
+      "PRM은 훈련이 더 쉽다",
+      "PRM은 더 큰 모델을 사용할 수 있다",
+      "PRM은 최종 답만 평가하므로 더 정확하다",
+      "PRM은 각 추론 단계에 피드백을 제공하여 신용 할당 문제를 해결한다"
+    ],
+    "answer": 3,
+    "explanation": "PRM은 '상태 s에서 이 추론 단계가 올바른가'를 평가하여 각 단계에 보상을 부여합니다. 긴 추론 체인에서 어디서 오류가 발생했는지 정확히 파악할 수 있습니다."
+  },
+  {
+    "id": "q5",
+    "question": "REINFORCE++가 기존 REINFORCE와 다른 점은?",
+    "options": [
+      "REINFORCE++는 미니배치 업데이트, 보상 정규화, KL 페널티 등 PPO 기법을 REINFORCE에 결합한다",
+      "REINFORCE++는 가치 함수를 사용한다",
+      "REINFORCE++는 더 작은 모델에서만 동작한다",
+      "REINFORCE++는 멀티모달 데이터를 처리한다"
+    ],
+    "answer": 0,
+    "explanation": "REINFORCE++는 기본 REINFORCE 알고리즘에 보상 정규화, 미니배치 업데이트, KL 발산 페널티 등 PPO의 안정화 기법들을 추가하여 더 안정적이고 효율적인 훈련을 달성합니다."
+  },
+  {
+    "id": "q6",
+    "question": "수학 추론에서 'Aha Moment'라고 불리는 현상은?",
+    "options": [
+      "모델이 훈련 중 갑자기 성능이 급격히 향상되는 구간",
+      "RLVR 훈련 중 모델이 자발적으로 자기 반성(self-reflection) 패턴을 발견하는 현상",
+      "인간이 모델의 출력을 처음 올바르게 평가하는 순간",
+      "보상 함수가 수렴하는 시점"
+    ],
+    "answer": 1,
+    "explanation": "DeepSeek-R1 훈련에서 관찰된 'Aha Moment'는 RLVR 훈련 중 모델이 '잠깐, 다시 생각해보자'와 같은 자기 반성 패턴을 자발적으로 학습하는 현상입니다."
+  },
+  {
+    "id": "q7",
+    "question": "Think Budget 또는 추론 토큰 수 제어가 중요한 이유는?",
+    "options": [
+      "GPU 메모리를 절약하기 위해",
+      "사용자 경험(UX)을 개선하기 위해서만 중요하다",
+      "더 많은 추론 토큰이 항상 더 좋은 결과를 보장하지 않으며, 효율적인 추론 전략을 학습해야 하기 때문에",
+      "추론 토큰 수는 성능과 무관하다"
+    ],
+    "answer": 2,
+    "explanation": "추론 토큰이 많을수록 항상 좋은 것은 아닙니다(overthinking). 적절한 길이로 효율적으로 추론하는 능력이 중요하며, 이를 제어하는 훈련이 필요합니다."
+  },
+  {
+    "id": "q8",
+    "question": "MCTS(Monte Carlo Tree Search)를 LLM 추론에 결합하는 주요 이점은?",
+    "options": [
+      "MCTS는 추론 속도를 높인다",
+      "MCTS는 보상 모델이 필요 없다",
+      "MCTS는 훈련 데이터를 자동으로 생성한다",
+      "MCTS는 체계적인 탐색을 통해 더 어려운 다단계 추론 문제를 해결할 수 있다"
+    ],
+    "answer": 3,
+    "explanation": "MCTS는 추론 트리를 체계적으로 탐색하여 greedy 디코딩으로는 찾기 어려운 복잡한 추론 경로를 발견합니다. AlphaGo 방식의 체계적 탐험을 언어 추론에 적용합니다."
+  },
+  {
+    "id": "q9",
+    "question": "보상 설계에서 형식 보상(format reward)이 중요한 이유는?",
+    "options": [
+      "모델이 정답을 파싱 가능한 형식으로 출력해야 자동 검증이 가능하기 때문에",
+      "형식이 내용보다 더 중요하기 때문에",
+      "형식 보상은 성능 향상에 무관하다",
+      "형식 보상은 인간 평가자가 필요하다"
+    ],
+    "answer": 0,
+    "explanation": "RLVR에서 자동 검증을 위해 모델이 정해진 형식(예: \\boxed{answer})으로 답을 출력해야 합니다. 형식 보상은 이 구조를 학습시켜 자동 채점을 가능하게 합니다."
+  },
+  {
+    "id": "q10",
+    "question": "Reasoning 모델의 '과도한 사고(overthinking)' 문제란?",
+    "options": [
+      "모델이 답을 생각하는 데 너무 많은 시간을 소비하는 것",
+      "쉬운 문제에도 불필요하게 긴 추론 체인을 생성하여 계산 효율이 떨어지는 현상",
+      "모델이 항상 같은 추론 패턴을 반복하는 것",
+      "인간이 이해하기 어려운 추론을 생성하는 것"
+    ],
+    "answer": 1,
+    "explanation": "Overthinking은 2+2 같은 간단한 문제에도 수백 토큰의 추론을 생성하는 현상입니다. 이는 추론 효율을 떨어뜨리며, 문제 난이도에 맞는 적응적 추론 길이를 학습시키는 것이 목표입니다."
+  },
+  {
+    "id": "q11",
+    "question": "Stepwise Verifier와 Final-Answer Verifier의 차이로 옳은 것은?",
+    "options": [
+      "Stepwise는 최종 답만 확인하고, Final-Answer는 중간 단계를 확인한다",
+      "두 방법은 동일하다",
+      "Stepwise는 각 추론 단계의 정확성을 확인하고, Final-Answer는 최종 답의 정확성만 확인한다",
+      "Stepwise는 사람이 하고, Final-Answer는 자동화된다"
+    ],
+    "answer": 2,
+    "explanation": "Stepwise Verifier(PRM)는 각 추론 단계가 올바른지 평가하고, Final-Answer Verifier(ORM)는 최종 답이 맞는지만 확인합니다. PRM이 더 세밀한 신용 할당을 제공합니다."
+  },
+  {
+    "id": "q12",
+    "question": "수학 데이터셋 MATH에서 RL 기반 추론 모델의 성능 향상을 제한하는 주요 요인은?",
+    "options": [
+      "MATH 데이터셋이 너무 작다",
+      "MATH 문제는 항상 유일한 답이 없다",
+      "GPU가 부족하다",
+      "보상이 이진(맞음/틀림)이어서 부분 점수가 없어 학습 신호가 희소하다"
+    ],
+    "answer": 3,
+    "explanation": "수학 문제에서 보상은 이진(정답/오답)입니다. 거의 맞았지만 계산 실수가 있는 경우와 완전히 잘못된 경우가 동일한 0점을 받아 학습 신호가 희소해집니다."
+  }
+]

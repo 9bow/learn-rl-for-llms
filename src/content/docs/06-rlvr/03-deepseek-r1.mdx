@@ -1,0 +1,100 @@
+---
+title: "DeepSeek-R1 심층 분석"
+description: "DeepSeek-R1-Zero와 DeepSeek-R1의 훈련 파이프라인, 자발적 추론 행동의 출현, 그리고 성능을 심층 분석합니다."
+sidebar:
+  order: 3
+learning_objectives:
+  - "DeepSeek-R1-Zero에서 SFT 없이 순수 RL만으로 추론 능력이 출현하는 과정을 이해한다"
+  - "DeepSeek-R1의 4단계 훈련 파이프라인을 순서대로 설명할 수 있다"
+  - "R1-Zero와 R1의 차이점과 각각의 한계를 비교할 수 있다"
+estimated_minutes: 35
+references:
+  - title: "DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning"
+    authors: "DeepSeek-AI"
+    year: 2025
+    url: "https://arxiv.org/abs/2501.12948"
+---
+
+## DeepSeek-R1의 의의
+
+DeepSeek-R1 (2025년 1월)은 오픈소스 LLM 추론 연구의 이정표다. OpenAI o1과 동등한 성능을 오픈소스로 달성하면서, 순수 RL로 추론 능력이 자발적으로 출현할 수 있음을 증명했다. 기술 보고서와 모델 가중치를 모두 공개하여 재현 가능한 연구의 기준을 세웠으며, Nature에도 게재(2025)되었다.
+
+---
+
+## DeepSeek-R1-Zero: 순수 RL 실험
+
+**R1-Zero** 는 SFT(Supervised Fine-Tuning) 없이 기반 모델에서 직접 RL을 적용한 실험이다. 이는 "RL만으로 추론 능력이 출현하는가?"라는 근본적 질문에 답하기 위한 것이었다.
+
+### 훈련 설정
+
+- **기반 모델**: DeepSeek-V3-Base (671B MoE)
+- **알고리즘**: GRPO
+- **보상**: 정확성 보상(수학 정답 비교) + 형식 보상(`<think>`, `<answer>` 태그 준수)
+- **데이터**: 수학 및 코딩 문제 (레이블만 있는 원시 데이터)
+
+### 자발적 추론 행동의 출현
+
+R1-Zero 훈련에서 가장 놀라운 발견은 RL이 진행될수록 **계획하지 않은 추론 행동들이 자발적으로 출현** 한다는 것이다.
+
+**Self-reflection(자기 반성)**: 모델이 스스로 이전 추론 단계를 되돌아보고 오류를 식별한다. "Wait, let me reconsider..." 같은 표현이 자연스럽게 등장한다.
+
+**Verification(검증)**: 최종 답을 제시하기 전에 다른 방법으로 답을 검증하는 행동이 출현한다.
+
+**Dynamic adaptation(동적 적응)**: 문제 난이도에 따라 사용하는 추론 토큰 수를 자동으로 조절한다. 쉬운 문제는 짧게, 어려운 문제는 길게.
+
+이 행동들은 **명시적으로 가르치지 않았음에도** RL의 보상 신호만으로 출현했다. 이는 RL이 단순히 정답을 암기하는 것이 아니라 추론 전략 자체를 발견함을 시사한다.
+
+### R1-Zero의 한계
+
+그러나 R1-Zero는 두 가지 심각한 문제를 가진다.
+
+1. **가독성 문제**: 추론 체인이 종종 혼합 언어(중국어+영어)로 생성되거나, 인간이 읽기 어려운 비구조적 형식으로 출력된다.
+2. **초기 수렴 불안정**: SFT 없이 시작하면 초기 학습이 느리고 불안정하다.
+
+---
+
+## DeepSeek-R1: 4단계 파이프라인
+
+**R1** 은 R1-Zero의 한계를 해결하기 위해 SFT와 RL을 결합한 4단계 훈련 파이프라인을 사용한다.
+
+### 1단계: Cold-Start SFT
+
+수천 개의 고품질 긴 CoT 데이터로 기반 모델을 fine-tuning한다. 이 데이터는 DeepSeek-R1-Zero가 생성한 추론 체인 중 가독성이 높고 형식이 올바른 것을 선별한다. 목적은 RL 시작 전 모델에게 "읽기 가능한 추론 체인"의 형식을 가르치는 것이다.
+
+$$
+\mathcal{D}_{\text{cold}} = \text{filter}(\{(x, r, a) \mid \text{readable}(r) \land \text{correct}(a)\})
+$$
+
+단 수천 개의 예시만으로도 RL의 초기 안정성이 크게 향상된다.
+
+### 2단계: Reasoning RL
+
+Cold-start SFT 모델에 GRPO 기반 RL을 적용한다. 보상은 정확성 보상과 형식 보상의 조합이다. 이 단계에서 모델의 추론 능력이 급격히 향상된다.
+
+### 3단계: Rejection Sampling SFT
+
+2단계 모델에서 다양한 도메인(수학, 코딩, 작문, 사실 QA, 자기인식 등)의 문제에 대해 응답을 대량 샘플링한다. 정답인 응답만 선별하여 SFT 데이터를 구축하고, 이로 fine-tuning한다.
+
+이 단계는 추론 도메인을 넘어 일반 능력(general capability)을 회복시키는 역할을 한다. 순수 RL은 학습 도메인 외의 능력을 저하시킬 수 있기 때문이다.
+
+### 4단계: 전체 RL
+
+Rejection Sampling SFT 모델에 다시 RL을 적용한다. 이번에는 수학·코딩의 검증 가능 보상과 함께 일반 도메인의 규칙 기반 보상(형식, 언어 일관성 등)을 결합한다.
+
+---
+
+## R1-Zero vs R1 비교
+
+| 항목 | R1-Zero | R1 |
+|------|---------|-----|
+| SFT 단계 | 없음 | Cold-start SFT + Rejection Sampling SFT |
+| 훈련 단계 수 | 1 (RL만) | 4단계 |
+| 추론 가독성 | 낮음 | 높음 |
+| AIME 2024 | 50.0% | **79.8%** |
+| MATH-500 | 71.0% | **92.3%** |
+| 일반 능력 | 저하 있음 | 유지됨 |
+| 오픈소스 공개 | 가중치 공개 | 가중치 공개 |
+
+## 주요 성과
+
+DeepSeek-R1은 AIME 2024에서 79.8%를 달성하여 OpenAI o1(83.3%)에 근접했다. 특히 671B MoE 구조를 사용하지만 실제 활성화 파라미터는 37B 수준이어서 추론 비용이 상대적으로 낮다. 이 결과는 충분한 RL 훈련과 적절한 커리큘럼만으로 최첨단 추론 능력을 달성할 수 있음을 증명했으며, 이후 Qwen-QwQ, Kimi k1.5 등 수많은 후속 모델의 청사진이 되었다.

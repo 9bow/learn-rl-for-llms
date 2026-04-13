@@ -1,0 +1,73 @@
+---
+title: "SimPO — 참조 모델 없는 선호 최적화"
+description: "SimPO의 평균 로그 확률 기반 암묵적 보상, 길이 정규화, AlpacaEval 2 성능 향상을 학습합니다."
+sidebar:
+  order: 4
+learning_objectives:
+  - "SimPO가 평균 로그 확률을 암묵적 보상으로 사용하는 원리를 이해한다"
+  - "길이 정규화가 길이 편향을 방지하는 메커니즘을 설명할 수 있다"
+  - "SimPO의 메모리 효율성과 DPO 대비 성능 우위를 정량적으로 파악한다"
+estimated_minutes: 20
+references:
+  - title: "SimPO: Simple Preference Optimization with a Reference-Free Reward"
+    authors: "Meng, Y., Xia, M., & Chen, D."
+    year: 2024
+    url: "https://arxiv.org/abs/2405.14734"
+  - title: "AlpacaEval: An Automatic Evaluator of Instruction-Following Models"
+    authors: "Li, X., et al."
+    year: 2023
+    url: "https://github.com/tatsu-lab/alpaca_eval"
+---
+
+## SimPO의 핵심 아이디어
+
+**SimPO(Simple Preference Optimization)** 는 Princeton NLP 그룹이 2024년 제안한 방법으로, DPO보다 단순하면서 더 강력한 성능을 보입니다. 핵심 아이디어는 두 가지다.
+
+첫째, 참조 모델(reference model)을 완전히 제거합니다. DPO는 정책 비율 $\frac{\pi_\theta(y|x)}{\pi_{\text{ref}}(y|x)}$를 암묵적 보상으로 사용하지만, SimPO는 **평균 로그 확률** 을 직접 암묵적 보상으로 사용합니다.
+
+$$
+r_{\text{SimPO}}(x, y) = \frac{1}{|y|} \log \pi_\theta(y \mid x) = \frac{1}{|y|} \sum_{t=1}^{|y|} \log \pi_\theta(y_t \mid x, y_{<t})
+$$
+
+둘째, 응답 길이 $|y|$로 나누어 **길이 정규화** 를 수행합니다. 이는 긴 응답이 단순히 더 높은 확률 합계를 가지는 길이 편향(length bias)을 방지합니다.
+
+## SimPO 손실 함수
+
+SimPO는 BT 모델 구조를 유지하면서 마진 항 $\gamma$를 추가합니다.
+
+$$
+L_{\text{SimPO}}(\pi_\theta) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}}\!\left[\log \sigma\!\left(\frac{\beta}{|y_w|}\log \pi_\theta(y_w|x) - \frac{\beta}{|y_l|}\log \pi_\theta(y_l|x) - \gamma\right)\right]
+$$
+
+여기서 $\gamma > 0$는 **목표 보상 마진** 으로, 선호 응답과 비선호 응답 사이에 최소 마진을 강제합니다. 이는 DPO에 없는 요소로, 경계 사례에서 더 명확한 분리를 유도합니다. 논문에서는 $\beta = 2.5$, $\gamma = 1.4$가 권장 기본값으로 사용되었다.
+
+## 참조 모델 제거의 실용적 이점
+
+참조 모델을 제거함으로써 얻는 실용적 이점은 상당하다.
+
+| 항목 | DPO | SimPO |
+|------|-----|-------|
+| 학습 시 GPU 메모리 | 정책 + 참조 모델 | 정책 모델만 |
+| 배치당 순전파 횟수 | 2회 (정책 + 참조) | 1회 |
+| 구현 복잡도 | 참조 모델 관리 필요 | 단순 |
+| 추론 시 추가 비용 | 없음 | 없음 |
+
+7B 모델 기준으로 참조 모델 제거는 약 절반의 GPU 메모리를 절약하며, 배치 처리 속도도 향상됩니다. 대형 모델일수록 이 이점은 더욱 커진다.
+
+## AlpacaEval 2 성능
+
+SimPO는 AlpacaEval 2 벤치마크에서 DPO 대비 현저한 성능 향상을 보고했다. AlpacaEval 2는 GPT-4가 응답 품질을 평가하는 자동 평가 벤치마크로, 길이 제어 승률(Length-Controlled Win Rate, LC-WR)이 주요 지표다.
+
+Llama-3-8B-Instruct 기반 실험에서:
+- **DPO**: LC-WR 26.3%
+- **SimPO**: LC-WR 32.7% (약 **+6.4점** 향상)
+
+Llama-3-70B-Instruct 기반에서도 유사한 경향을 보였으며, MT-Bench, Arena-Hard 등 다른 벤치마크에서도 DPO보다 일관되게 높은 성능을 기록했다. 이 논문은 NeurIPS 2024에 발표되었다.
+
+## 길이 정규화의 중요성
+
+길이 정규화 없이 단순히 $\log \pi_\theta(y|x)$를 보상으로 사용하면, 모델은 긴 응답을 선호하도록 편향됩니다. 자동 회귀 언어 모델의 확률은 토큰이 추가될수록 감소하는 경향이 있어, 짧은 응답이 수학적으로 더 높은 확률을 가질 수 있습니다. 길이 정규화는 이 편향을 제거하고, 실제 내용 품질에 기반한 선호 학습을 가능하게 합니다.
+
+## 정리
+
+SimPO는 "단순할수록 좋다"는 원칙의 좋은 예다. 참조 모델을 제거하고 평균 로그 확률과 마진을 더하는 최소한의 변경만으로 DPO를 능가하는 성능을 달성했다. 이는 DPO의 참조 모델이 실제로 필요하지 않을 수 있다는 점을 시사하며, 이후 ORPO, DAPO 등 참조 모델 없는 방법들의 흐름과도 맥을 같이 합니다.

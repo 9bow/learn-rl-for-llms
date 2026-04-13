@@ -1,0 +1,146 @@
+[
+  {
+    "id": "q1",
+    "question": "DPO(Direct Preference Optimization)가 RLHF PPO와 비교하여 가장 큰 차이점은?",
+    "options": [
+      "DPO는 보상 모델을 명시적으로 훈련하지 않고, 정책 자체가 암묵적 보상 모델 역할을 한다",
+      "DPO는 더 많은 계산 자원을 사용한다",
+      "DPO는 사전 훈련된 모델 없이 처음부터 훈련한다",
+      "DPO는 인간 피드백을 사용하지 않는다"
+    ],
+    "answer": 0,
+    "explanation": "DPO는 별도의 보상 모델 훈련 없이 쌍 비교 데이터로 직접 정책을 최적화합니다. r*(x,y) = β log(π_θ/π_ref) + β log Z(x)로 암묵적 보상이 정의됩니다."
+  },
+  {
+    "id": "q2",
+    "question": "DPO 손실 함수에서 β 파라미터의 역할은?",
+    "options": [
+      "학습률을 조절한다",
+      "참조 정책으로부터의 이탈 강도를 조절한다",
+      "선택된(chosen) 응답과 거부된(rejected) 응답 사이의 마진을 조절한다",
+      "배치 크기를 결정한다"
+    ],
+    "answer": 1,
+    "explanation": "DPO에서 β는 KL 발산 강도를 조절합니다. β가 클수록 참조 정책에 가깝게 유지되고, 작을수록 선호 데이터에 더 강하게 맞춥니다."
+  },
+  {
+    "id": "q3",
+    "question": "IPO(Identity Preference Optimization)가 DPO를 개선한 점은?",
+    "options": [
+      "더 큰 모델을 지원한다",
+      "인간 피드백 없이 자동으로 선호를 생성한다",
+      "완벽하게 분리 가능한 데이터에서 DPO가 과적합되는 문제를 정규화로 해결한다",
+      "멀티모달 데이터를 지원한다"
+    ],
+    "answer": 2,
+    "explanation": "IPO는 DPO가 결정론적(완벽히 분리 가능한) 선호 데이터에서 과적합될 수 있는 문제를 목적함수에 정규화 항을 추가하여 해결합니다."
+  },
+  {
+    "id": "q4",
+    "question": "SimPO(Simple Preference Optimization)의 핵심 혁신은?",
+    "options": [
+      "참조 모델을 더 자주 업데이트한다",
+      "보상 모델을 별도로 훈련한다",
+      "PPO와 DPO를 결합한다",
+      "참조 모델을 완전히 제거하고 시퀀스 평균 로그 확률을 보상으로 사용한다"
+    ],
+    "answer": 3,
+    "explanation": "SimPO는 참조 모델 없이 π_θ(y|x)의 평균 로그 확률을 암묵적 보상으로 사용합니다. 이를 통해 메모리와 계산 비용을 줄이면서 DPO 대비 성능을 향상시킵니다."
+  },
+  {
+    "id": "q5",
+    "question": "ORPO(Odds Ratio Preference Optimization)의 특징은?",
+    "options": [
+      "SFT와 선호 정렬을 단일 손실 함수로 통합하여 참조 모델이 불필요하다",
+      "SFT와 정렬을 별도 단계로 수행한다",
+      "보상 모델이 필요하다",
+      "오프라인 데이터만 사용할 수 있다"
+    ],
+    "answer": 0,
+    "explanation": "ORPO는 SFT 손실과 오즈비(odds ratio) 기반 선호 손실을 결합하여 단일 단계로 SFT와 정렬을 동시에 수행합니다. 참조 모델이 불필요합니다."
+  },
+  {
+    "id": "q6",
+    "question": "DPO의 알려진 한계 중 하나인 '확률 질량 이동(probability mass displacement)' 문제란?",
+    "options": [
+      "선택된 응답의 확률이 높아지는 대신 거부된 응답의 확률이 감소하지 않는 현상",
+      "선택된 응답뿐 아니라 거부된 응답의 확률도 함께 증가하는 현상",
+      "모델이 생성하는 응답의 길이가 변하는 현상",
+      "보상 점수가 불안정하게 변동하는 현상"
+    ],
+    "answer": 1,
+    "explanation": "DPO 학습 시 선택된 응답의 확률을 높이려 할 때, 거부된 응답의 확률도 함께 높아질 수 있습니다. 이는 실제 정렬보다 단순히 분포를 이동시키는 결과를 낳습니다."
+  },
+  {
+    "id": "q7",
+    "question": "Rejection Sampling Fine-Tuning(RFT)이 DPO와 다른 점은?",
+    "options": [
+      "RFT는 오프라인 데이터를 사용하고, DPO는 온라인 데이터를 사용한다",
+      "RFT는 인간 피드백이 필요하고, DPO는 AI 피드백만 사용한다",
+      "RFT는 보상이 높은 샘플만 골라 SFT 방식으로 훈련하고, DPO는 쌍 비교를 사용한다",
+      "두 방법은 동일하다"
+    ],
+    "answer": 2,
+    "explanation": "RFT는 Best-of-N 샘플링으로 보상이 높은 응답을 선별하고, 이를 SFT로 학습합니다. 쌍 비교 없이 단방향 선호 신호를 사용합니다."
+  },
+  {
+    "id": "q8",
+    "question": "온라인 DPO(Online DPO)가 오프라인 DPO보다 성능이 좋은 이유는?",
+    "options": [
+      "더 많은 GPU를 사용하기 때문에",
+      "보상 모델이 필요하지 않기 때문에",
+      "더 큰 배치 크기를 사용할 수 있기 때문에",
+      "현재 정책이 생성한 샘플에 대한 선호를 학습하여 분포 불일치 문제를 완화하기 때문에"
+    ],
+    "answer": 3,
+    "explanation": "오프라인 DPO는 과거 데이터 분포와 현재 정책의 분포가 불일치하는 문제가 있습니다. 온라인 DPO는 현재 정책의 출력에 대한 피드백을 실시간으로 수집하여 이를 해결합니다."
+  },
+  {
+    "id": "q9",
+    "question": "KTO(Kahneman-Tversky Optimization)의 핵심 아이디어는?",
+    "options": [
+      "쌍 비교 대신 각 응답의 이진(좋음/나쁨) 레이블만으로 훈련한다",
+      "보상 모델을 경제학적 모델로 교체한다",
+      "DPO에 정규화 항을 추가한다",
+      "인간 심리학 원리를 이용해 탐험 전략을 최적화한다"
+    ],
+    "answer": 0,
+    "explanation": "KTO는 쌍 비교 데이터 없이 각 응답이 좋은지 나쁜지의 이진 레이블만으로 훈련합니다. 행동경제학의 전망이론(Prospect Theory)을 영감으로 합니다."
+  },
+  {
+    "id": "q10",
+    "question": "선호 데이터 품질이 DPO 성능에 미치는 영향으로 올바른 것은?",
+    "options": [
+      "데이터 품질은 무관하며 양만 중요하다",
+      "선택된 응답과 거부된 응답의 품질 차이가 클수록 더 명확한 학습 신호가 된다",
+      "모든 쌍의 품질이 동일해야 학습이 안정적이다",
+      "선호 데이터는 자동으로 검증된다"
+    ],
+    "answer": 1,
+    "explanation": "선택된 응답(chosen)과 거부된 응답(rejected) 사이의 품질 차이가 명확할수록 DPO가 더 강한 학습 신호를 얻습니다. 품질 차이가 모호하면 학습이 불안정해집니다."
+  },
+  {
+    "id": "q11",
+    "question": "DPO에서 'token-level DPO'와 'sequence-level DPO'의 차이는?",
+    "options": [
+      "token-level은 더 빠르고, sequence-level은 더 정확하다",
+      "두 방법은 동일한 결과를 낸다",
+      "token-level은 각 토큰에 개별 손실을 적용하고, sequence-level은 전체 시퀀스에 단일 손실을 적용한다",
+      "token-level은 DPO이고, sequence-level은 PPO이다"
+    ],
+    "answer": 2,
+    "explanation": "Token-level DPO는 각 토큰의 로그 확률 차이를 계산하고, sequence-level DPO는 전체 시퀀스의 합산 로그 확률을 사용합니다. 전자가 더 세밀한 신용 할당을 제공합니다."
+  },
+  {
+    "id": "q12",
+    "question": "DPO 대비 PPO의 장점으로 옳지 않은 것은?",
+    "options": [
+      "PPO는 온라인으로 새로운 응답을 생성하며 탐험이 가능하다",
+      "PPO는 더 복잡한 보상 함수를 사용할 수 있다",
+      "PPO는 분포 이탈 문제를 KL 제약으로 명시적으로 제어한다",
+      "PPO는 DPO보다 구현이 단순하다"
+    ],
+    "answer": 3,
+    "explanation": "PPO는 Actor, Critic, Reward Model, Reference Model 등 여러 모델을 동시에 관리해야 하므로 구현이 복잡합니다. DPO가 훨씬 단순한 구현을 가집니다."
+  }
+]

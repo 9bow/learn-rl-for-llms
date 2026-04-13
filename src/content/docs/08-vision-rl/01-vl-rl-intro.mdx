@@ -1,0 +1,131 @@
+---
+title: "멀티모달 LLM의 RL 적용"
+description: "VLM에서 강화학습의 가능성과 도전 — 텍스트 RL과의 차이, 시각적 환각 문제, 주요 접근법 개관"
+sidebar:
+  order: 1
+learning_objectives:
+  - VLM 아키텍처(Vision Encoder + LLM + Projection)의 각 구성 요소와 RL 적용 가능 지점을 설명할 수 있다
+  - 텍스트 RL과 멀티모달 RL의 핵심 차이점(이미지 인코딩, 멀티모달 보상 정의)을 비교할 수 있다
+  - 시각적 환각(visual hallucination) 문제와 RL을 통한 해결 가능성을 이해한다
+estimated_minutes: 25
+references:
+  - title: "LLaVA: Visual Instruction Tuning"
+    url: "https://arxiv.org/abs/2304.08485"
+  - title: "Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond"
+    url: "https://arxiv.org/abs/2308.12966"
+  - title: "RLHF-V: Towards Trustworthy MLLMs via Behavior Alignment from Fine-Grained Correctional Human Feedback"
+    url: "https://arxiv.org/abs/2312.00849"
+  - title: "LLaMA-Adapter V2: Parameter-Efficient Visual Instruction Model"
+    url: "https://arxiv.org/abs/2304.15010"
+---
+
+## VLM이란 무엇인가
+
+**비전-언어 모델(Vision-Language Model, VLM)** 은 이미지와 텍스트를 동시에 처리하는 멀티모달 AI 시스템입니다. 현대 VLM의 표준 아키텍처는 세 구성 요소로 이루어집니다.
+
+```
+입력 이미지
+    ↓
+Vision Encoder (예: CLIP ViT-L/14)
+    ↓ 시각 특징 벡터
+Projection Layer (선형 변환 또는 MLP)
+    ↓ LLM 토큰 공간으로 매핑
+LLM (예: LLaMA, Qwen)
+    ↓
+텍스트 출력
+```
+
+**Vision Encoder** 는 이미지를 고차원 특징 벡터로 변환합니다. CLIP(Contrastive Language-Image Pre-Training)이나 SigLIP 기반 ViT가 주로 사용됩니다. **Projection Layer** 는 시각 특징을 LLM의 토큰 임베딩 공간으로 매핑합니다. 이 레이어의 설계가 멀티모달 이해 품질에 큰 영향을 미친다. **LLM** 은 텍스트 토큰과 시각 토큰을 함께 처리하여 응답을 생성합니다.
+
+## 텍스트 RL과 VLM RL의 차이
+
+텍스트 전용 LLM에 RL을 적용하는 것과 VLM에 적용하는 것은 여러 면에서 다릅니다.
+
+### 이미지 인코딩의 복잡성
+
+텍스트 토큰과 달리 이미지는 연속 공간의 고차원 벡터다. 이미지 $I$ 는 Vision Encoder를 통해 특징 시퀀스로 변환됩니다.
+
+$$\mathbf{v} = \text{ViT}(I) \in \mathbb{R}^{N \times d}$$
+
+여기서 $N$ 은 패치 수(예: 256), $d$ 는 특징 차원입니다. 이 시각 토큰들은 텍스트 토큰과 함께 LLM의 어텐션 레이어를 통과합니다. RL 훈련 시 이 이미지 특징의 기울기가 Vision Encoder까지 전파되어야 하는지 여부가 중요한 설계 결정입니다.
+
+### 멀티모달 보상 정의의 어려움
+
+텍스트 생성의 보상은 상대적으로 단순하다(정답 일치, 선호도 등). 그러나 VLM의 보상은 시각적 내용과 텍스트 출력의 **일치성** 을 평가해야 합니다.
+
+| 보상 유형 | 평가 내용 | 자동화 가능성 |
+|---------|---------|------------|
+| 캡션 정확도 | 이미지 내용과 설명 일치 | 어려움 |
+| VQA 정확도 | 시각적 질문 답변 | 쉬움 |
+| 객체 탐지 IoU | 바운딩 박스 정확도 | 쉬움 |
+| OCR 정확도 | 텍스트 인식 | 쉬움 |
+| 공간 추론 | 위치 관계 설명 | 중간 |
+| 환각 여부 | 없는 객체 언급 | 어려움 |
+
+### 탐색 공간의 차이
+
+텍스트 RL에서 정책은 이산 토큰 공간을 탐색합니다. VLM RL에서는 여기에 더해 이미지 인코딩의 연속 공간이 추가됩니다. 이는 탐색의 복잡도를 높이고 안정적인 학습을 더 어렵게 만듭니다.
+
+## RL 적용 가능 지점
+
+VLM 아키텍처에서 RL은 여러 지점에 적용될 수 있습니다.
+
+**전체 파인튜닝(Full Fine-tuning)**: LLM과 Projection Layer 전체를 업데이트합니다. 최고 성능을 기대할 수 있지만 계산 비용이 매우 높습니다.
+
+**LLM만 RL**: Vision Encoder와 Projection Layer는 고정하고 LLM만 업데이트합니다. 가장 일반적인 접근법입니다.
+
+**Projection Layer만 RL**: Vision Encoder와 LLM은 고정하고 Projection Layer만 업데이트합니다. 시각-언어 정렬에 집중합니다.
+
+**LoRA 기반 RL**: 저랭크 어댑터(Low-Rank Adapter)를 통해 효율적으로 파라미터를 업데이트합니다. 계산 효율성과 성능의 균형을 맞춘다.
+
+$$\Delta W = BA, \quad B \in \mathbb{R}^{d \times r}, A \in \mathbb{R}^{r \times k}, \quad r \ll \min(d, k)$$
+
+## 시각적 환각 문제
+
+**시각적 환각(visual hallucination)** 은 VLM이 이미지에 존재하지 않는 객체, 속성, 관계를 설명하는 현상입니다. 이는 VLM의 가장 심각한 문제 중 하나다.
+
+### 환각의 유형
+
+**존재 환각**: 이미지에 없는 객체를 있다고 말하는 경우
+- 예: 빈 테이블 이미지에서 "테이블 위에 사과가 있습니다"
+
+**속성 환각**: 객체의 색상, 크기, 형태를 잘못 설명하는 경우
+- 예: 빨간 자동차를 "파란 자동차"라고 설명
+
+**관계 환각**: 객체 간 공간적/논리적 관계를 잘못 설명하는 경우
+- 예: 개가 고양이 위에 있는데 "고양이가 개 위에 있습니다"
+
+### RL을 통한 환각 감소
+
+RL은 환각 감소에 특히 효과적입니다. 이유는 **보상 신호가 환각을 직접 페널티** 로 처리할 수 있기 때문입니다.
+
+$$r_{hallucination} = -\lambda \cdot \text{count}(\text{hallucinated objects})$$
+
+이를 통해 모델은 이미지를 더 신중하게 분석하고, 불확실할 때는 주장을 자제하는 방향으로 학습됩니다.
+
+## 주요 접근법 개관
+
+VLM RL 연구는 크게 네 방향으로 발전하고 있습니다.
+
+**1. 멀티모달 RLHF**: 인간 피드백을 시각적 맥락에서 수집하여 보상 모델을 학습한다 (LLaVA-RLHF, RLHF-V).
+
+**2. AI 피드백 기반 RL**: 인간 대신 강력한 AI 모델이 피드백을 제공한다 (RLAIF-V).
+
+**3. 검증 가능한 시각 보상**: 객체 탐지 IoU, OCR 정확도 같은 자동화된 보상을 사용한다 (Vision RLVR).
+
+**4. 비평 모델 통합**: 전용 비평 모델이 VLM 출력의 품질을 평가하고 피드백을 제공한다 (LLaVA-Critic).
+
+## VLM RL의 고유한 어려움
+
+| 어려움 | 설명 | 현재 해결 접근 |
+|-------|------|-------------|
+| 멀티모달 보상 정의 | 시각-텍스트 일치 자동 평가 어려움 | 검증 가능한 서브태스크 분리 |
+| 이미지 다양성 | 동일 개념도 시각적으로 다양 | 대규모 이미지 증강 |
+| 긴 컨텍스트 | 이미지 토큰 수 많음 (256~4096) | 효율적 어텐션 메커니즘 |
+| 모드 불균형 | 텍스트 > 이미지 정보량 | 멀티모달 균형 샘플링 |
+| 환각 보상 설계 | 없는 것을 주장하는 페널티 | 사실 기반 보상 |
+| 계산 비용 | 이미지 인코딩 추가 비용 | LoRA, 양자화 |
+
+## 정리
+
+VLM에 RL을 적용하는 것은 텍스트 전용 RL보다 복잡하지만, 시각적 환각 감소와 멀티모달 이해 향상이라는 강력한 동기가 있습니다. 이미지 인코딩의 연속성, 멀티모달 보상 정의의 어려움, 높은 계산 비용 등의 도전 과제에도 불구하고, 검증 가능한 시각 보상과 AI 피드백 기반 접근법이 이 분야를 빠르게 발전시키고 있습니다. 이후 챕터에서는 각 접근법을 상세히 살펴본다.

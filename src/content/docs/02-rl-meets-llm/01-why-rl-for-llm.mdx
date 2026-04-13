@@ -1,0 +1,88 @@
+---
+title: "왜 LLM에 RL을 쓰는가?"
+description: "사전학습의 한계, 정렬 문제, SFT만으로 부족한 이유, 그리고 RL이 선호 기반 최적화에 적합한 이유를 학습합니다."
+sidebar:
+  order: 1
+learning_objectives:
+  - "사전학습(pretraining)의 다음 토큰 예측 목표가 왜 안전성과 유용성을 보장하지 못하는지 설명할 수 있다"
+  - "지도 미세조정(SFT)만으로는 해결되지 않는 분포 차이와 노출 편향 문제를 설명할 수 있다"
+  - "RL이 인간 선호 기반 최적화에 적합한 근본적인 이유를 논할 수 있다"
+estimated_minutes: 30
+references:
+  - title: "Training language models to follow instructions with human feedback"
+    authors: "Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., ... & Lowe, R."
+    year: 2022
+    url: "https://arxiv.org/abs/2203.02155"
+  - title: "Language Models are Few-Shot Learners"
+    authors: "Brown, T., Mann, B., Ryder, N., Subbiah, M., Kaplan, J. D., et al."
+    year: 2020
+    url: "https://arxiv.org/abs/2005.14165"
+  - title: "A General Language Assistant as a Laboratory for Alignment"
+    authors: "Askell, A., Bai, Y., Chen, A., Conerly, T., et al."
+    year: 2021
+    url: "https://arxiv.org/abs/2112.00861"
+---
+
+## 사전학습의 목표와 그 한계
+
+대규모 언어 모델(LLM)의 사전학습(pretraining)은 인터넷 규모의 텍스트 데이터에서 **다음 토큰 예측(next token prediction)** 을 학습하는 과정입니다. 수식으로는:
+
+$$\mathcal{L}_{PT}(\theta) = -\sum_{t=1}^{T} \log P_\theta(x_t \mid x_1, x_2, \ldots, x_{t-1})$$
+
+이 목표는 언어의 통계적 구조, 세계 지식, 추론 능력을 압축하는 데 탁월합니다. GPT-3(Brown et al., 2020)가 175B 파라미터로 광범위한 zero-shot 및 few-shot 능력을 보인 것이 그 증거입니다.
+
+그러나 다음 토큰 예측은 세 가지 핵심 특성을 **직접적으로 최적화하지 않습니다**:
+
+| 특성 | 사전학습 목표와의 관계 |
+|------|----------------------|
+| **사실성(Factuality)** | 인터넷에는 허위 정보가 많으며, 모델은 이를 그대로 모방 |
+| **유용성(Helpfulness)** | 지시어 따르기가 아닌 데이터 분포 모방 |
+| **안전성(Safety)** | 유해한 텍스트도 학습 데이터에 포함됨 |
+
+사전학습 모델에 직접 프롬프트를 주면, 도움이 되는 답변 대신 프롬프트와 유사한 텍스트를 생성하거나, 질문에 질문으로 답하거나, 유해한 내용을 생성할 수 있습니다.
+
+## 정렬 문제 (Alignment Problem)
+
+**정렬 문제(Alignment Problem)** 는 AI 시스템이 인간의 가치, 의도, 목표에 부합하도록 만드는 도전입니다. Askell et al. (2021)은 정렬된 AI 조수의 세 가지 핵심 특성을 제시했습니다:
+
+- **유용함(Helpful)**: 사용자의 실제 의도를 파악하고 도움을 제공
+- **무해함(Harmless)**: 개인이나 사회에 해를 끼치지 않음
+- **정직함(Honest)**: 사실에 기반하고 불확실성을 인정
+
+사전학습만으로는 이 세 가지가 자동으로 달성되지 않습니다. 모델은 강력하지만 "정렬되지 않은" 상태입니다.
+
+## SFT만으로 부족한 이유
+
+**지도 미세조정(Supervised Fine-Tuning, SFT)** 은 인간이 작성한 고품질 예시 쌍 $(x, y^*)$으로 모델을 추가 학습합니다:
+
+$$\mathcal{L}_{SFT}(\theta) = -\sum_{t=1}^{|y^*|} \log P_\theta(y^*_t \mid x, y^*_1, \ldots, y^*_{t-1})$$
+
+SFT는 지시어 따르기 능력을 크게 향상시키지만, 두 가지 근본적인 한계가 있습니다:
+
+**1. 노출 편향(Exposure Bias)**: SFT 학습 시 모델은 항상 정답 토큰 $y^*_t$를 이전 입력으로 받습니다(teacher forcing). 그러나 추론 시에는 자신이 생성한 토큰이 다음 입력이 됩니다. 초기 오류가 누적되면서 학습 분포와 추론 분포 사이에 불일치가 발생합니다.
+
+**2. 분포 차이(Distribution Mismatch)**: SFT 데이터는 인간이 작성한 최적 반응의 분포를 따릅니다. 그러나 테스트 시 사용자의 프롬프트 분포와 SFT 데이터 분포가 다를 수 있습니다. 또한 SFT는 "인간이 작성한 반응"의 모방이지, "인간이 선호하는 반응"의 직접 최적화가 아닙니다.
+
+또한 SFT 데이터 수집에는 높은 비용이 필요합니다. 전문가가 고품질 반응을 직접 작성해야 하므로, 대규모 확보가 어렵습니다.
+
+## RL이 선호 기반 최적화에 적합한 이유
+
+강화학습은 다음과 같은 이유로 LLM 정렬에 자연스럽게 부합합니다:
+
+**1. 비미분가능 목표의 최적화**: 인간의 선호, BLEU 점수, 사실성 여부는 미분이 불가능합니다. RL은 보상 신호를 통해 이런 목표도 최적화할 수 있습니다.
+
+**2. 평가가 생성보다 쉽다**: 고품질 반응을 직접 작성하는 것은 어렵지만, 두 반응 중 어느 것이 더 좋은지 판단하는 것은 상대적으로 쉽습니다. RL은 이 **비교 기반 선호(pairwise preference)** 신호를 활용합니다.
+
+**3. 비용 효율성**: 비교 레이블은 전문가 작성 반응보다 수집 비용이 낮습니다. Ouyang et al. (2022)의 InstructGPT에서 비교 데이터가 SFT 데이터보다 10배 이상 많이 수집되었습니다.
+
+**4. 목표 직접 최적화**: SFT가 "올바른 반응의 모방"이라면, RLHF는 "인간이 선호하는 반응의 직접 최적화"입니다. 모델은 인간 평가자가 더 좋다고 판단하는 반응을 생성하도록 직접 학습됩니다.
+
+## InstructGPT: 세 가지 접근법의 결합
+
+Ouyang et al. (2022)의 InstructGPT는 사전학습 한계를 다음 세 단계로 극복했습니다:
+
+1. **SFT**: 40명의 인간 주석자가 작성한 지시-반응 쌍으로 GPT-3 미세조정
+2. **보상 모델(RM)**: 동일 프롬프트에 대한 여러 모델 반응의 순위 비교로 인간 선호 학습
+3. **PPO-RLHF**: 보상 모델을 환경으로 사용하여 PPO로 최적화
+
+결과적으로 1.3B 파라미터의 InstructGPT가 175B 파라미터의 GPT-3보다 인간 평가자에게 더 선호되었습니다. 이는 모델 규모보다 정렬이 실용적 성능에 더 중요할 수 있음을 시사합니다.

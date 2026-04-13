@@ -1,0 +1,149 @@
+---
+title: "RLSD — RL with Self-Distillation"
+description: "SDPO와 Self-Distilled RLVR — 외부 교사 없이 자신의 고보상 궤적에서 증류하는 강화학습"
+sidebar:
+  order: 3
+learning_objectives:
+  - SDPO가 외부 교사 모델 없이 자기 증류를 통해 학습하는 원리를 설명할 수 있다
+  - GRPO 대비 SDPO의 수렴 속도와 성능 차이를 정량적으로 비교할 수 있다
+  - Self-Distilled RLVR과 GRPO+SDPO 통합의 Sample Routing 메커니즘을 이해한다
+estimated_minutes: 30
+references:
+  - title: "SDPO: Self-Distilled Preference Optimization"
+    url: "https://arxiv.org/abs/2601.20802"
+  - title: "Self-Distilled RLVR"
+    url: "https://arxiv.org/abs/2604.03128"
+  - title: "Integrating GRPO and SDPO via Sample Routing"
+    url: "https://arxiv.org/abs/2604.02288"
+  - title: "Proximal Policy Optimization Algorithms"
+    url: "https://arxiv.org/abs/1707.06347"
+---
+
+## 자기 증류(Self-Distillation)의 직관
+
+지식 증류(knowledge distillation)의 전통적인 패러다임은 **교사(teacher) → 학생(student)** 구조입니다. 큰 모델의 지식을 작은 모델로 전달합니다. 그러나 이 패러다임은 항상 더 강력한 외부 교사 모델이 필요하다는 제약이 있습니다.
+
+**자기 증류(self-distillation)** 는 이 제약을 깬다. 모델이 생성한 출력 중 **높은 보상을 받은 궤적** 을 자신의 교사로 삼는다. 이를 통해 외부 교사 없이도 점진적으로 자신을 개선할 수 있습니다.
+
+RL의 맥락에서 자기 증류는 다음과 같이 작동합니다.
+
+```
+현재 정책 π_θ로 N개 출력 샘플링
+    ↓
+각 출력의 보상 r_i 계산
+    ↓
+보상 상위 k% 출력을 "자기 교사" 데이터로 선별
+    ↓
+선별된 고보상 출력에 대해 모방 학습
+    ↓
+업데이트된 정책 π_{θ+1}
+    ↓ (반복)
+```
+
+## SDPO: Self-Distilled Preference Optimization
+
+**SDPO** (arXiv:2601.20802)는 자기 증류를 선호 최적화(preference optimization) 프레임워크에 통합합니다. DPO(Direct Preference Optimization)의 확장으로, 외부 선호 데이터 없이 자체 생성 데이터로 학습합니다.
+
+### 핵심 아이디어
+
+각 프롬프트 $x$ 에 대해 현재 정책 $\pi_\theta$ 로 $G$ 개의 출력을 샘플링합니다.
+
+$$\{o_1, o_2, \ldots, o_G\} \sim \pi_\theta(\cdot | x)$$
+
+보상 $r_i = r(o_i, x)$ 를 계산하여 고보상 출력 $o^+$ 와 저보상 출력 $o^-$ 를 선별합니다.
+
+$$o^+ = \arg\max_{i} r_i, \quad o^- = \arg\min_{i} r_i$$
+
+이 쌍 $(o^+, o^-)$ 을 선호 데이터로 사용하여 DPO 손실을 계산합니다.
+
+$$\mathcal{L}_{SDPO} = -\log \sigma\left(\beta \log \frac{\pi_\theta(o^+ | x)}{\pi_{ref}(o^+ | x)} - \beta \log \frac{\pi_\theta(o^- | x)}{\pi_{ref}(o^- | x)}\right)$$
+
+여기서 $\pi_{ref}$ 는 이전 체크포인트의 정책으로, 고정된 외부 모델이 아니다.
+
+### 성능 결과
+
+화학 도메인(분자 설계)에서의 SDPO vs GRPO 비교 결과는 인상적입니다.
+
+| 모델 | 방법 | 성능 | 수렴 속도 |
+|------|------|------|---------|
+| Qwen3-8B | GRPO | 60.0% | 기준 |
+| Qwen3-8B | **SDPO** | **70.1%** | **6배 빠름** |
+| Olmo3 | GRPO | 54.3% | 기준 |
+| Olmo3 | **SDPO** | **76.8%** | **6배 빠름** |
+
+GRPO 대비 10%p 이상의 성능 향상과 **6배 빠른 수렴** 은 매우 주목할 만한 결과입니다. 수렴 속도 향상은 실제 훈련 비용 절감으로 직결됩니다.
+
+### 왜 SDPO가 빠른가
+
+GRPO는 각 스텝에서 정책 경사를 통해 업데이트하며 높은 분산(variance)을 갖습니다. SDPO는 선호 최적화 손실이 더 안정적인 학습 신호를 제공하기 때문에 분산이 낮고 수렴이 빠릅니다.
+
+$$\text{Var}(\nabla \mathcal{L}_{GRPO}) \gg \text{Var}(\nabla \mathcal{L}_{SDPO})$$
+
+## Self-Distilled RLVR
+
+**Self-Distilled RLVR** (arXiv:2604.03128)은 RLVR의 방향성과 자기 증류의 규모를 결합합니다. 즉, 검증 가능한 보상(RLVR)으로 학습 방향을 정하면서, 자기 증류로 학습의 규모와 효율을 높입니다.
+
+### 두 요소의 결합
+
+**RLVR 방향**: 검증 가능한 보상 $r_{verify}$ 가 학습의 목표를 명확히 정의합니다.
+
+**자기 증류 규모**: 고보상 궤적에서의 증류가 각 업데이트에서 더 많은 정보를 추출합니다.
+
+$$\mathcal{L}_{SD-RLVR} = \mathcal{L}_{RLVR} + \lambda \cdot \mathcal{L}_{distill}$$
+
+여기서 $\mathcal{L}_{distill}$ 은 현재 정책이 고보상 궤적을 모방하도록 하는 손실입니다.
+
+$$\mathcal{L}_{distill} = -\mathbb{E}_{o^+ \sim \text{top-k}} [\log \pi_\theta(o^+ | x)]$$
+
+### 더 높은 수렴 천장
+
+Self-Distilled RLVR의 핵심 이점은 **수렴 천장(convergence ceiling)** 이 더 높다는 것입니다. 순수 RLVR은 탐색의 다양성이 감소할수록 성능 향상이 둔화됩니다. 자기 증류는 고보상 궤적을 반복적으로 활용함으로써 이 천장을 높입니다.
+
+### 학습 안정성 향상
+
+자기 증류는 훈련 안정성에도 기여합니다. 순수 RL은 보상 신호의 노이즈로 인해 정책이 급격히 변화할 수 있습니다. 자기 증류 정규화는 이 변동을 억제합니다.
+
+$$\pi_{t+1} = (1-\alpha) \cdot \pi_t^{RLVR} + \alpha \cdot \pi_t^{distill}$$
+
+## GRPO와 SDPO의 통합: Sample Routing
+
+**GRPO+SDPO 통합** (arXiv:2604.02288)은 두 방법을 단순히 더하는 것이 아니라 **Sample Routing** 을 통해 적응적으로 결합합니다.
+
+### Sample Routing 메커니즘
+
+각 샘플의 특성에 따라 GRPO 업데이트와 SDPO 업데이트를 선택적으로 적용합니다.
+
+$$\text{method}(o_i) = \begin{cases} \text{GRPO} & \text{if } \text{diversity}(o_i) > \tau \\ \text{SDPO} & \text{if } \text{diversity}(o_i) \leq \tau \end{cases}$$
+
+여기서 $\text{diversity}(o_i)$ 는 해당 샘플이 현재 정책 분포에서 얼마나 다양한지를 측정하는 지표다. 새롭고 다양한 샘플은 GRPO로 탐색을 강화하고, 이미 알려진 고보상 패턴의 샘플은 SDPO로 활용 효율을 높입니다.
+
+### 수식 표현
+
+라우팅 가중치 $w_i \in [0, 1]$ 을 사용한 통합 손실:
+
+$$\mathcal{L}_{unified} = \sum_i \left[ w_i \cdot \mathcal{L}_{GRPO}(o_i) + (1 - w_i) \cdot \mathcal{L}_{SDPO}(o_i) \right]$$
+
+$w_i$ 는 샘플의 다양성 점수에 따라 연속적으로 변화합니다.
+
+## 세 방법 비교
+
+| 특성 | GRPO | SDPO | Self-Distilled RLVR | GRPO+SDPO |
+|------|------|------|-------------------|----------|
+| 외부 교사 | 불필요 | 불필요 | 불필요 | 불필요 |
+| 수렴 속도 | 기준 | 6배 빠름 | 4배 빠름 | 5배 빠름 |
+| 수렴 천장 | 중간 | 중간 | 높음 | 높음 |
+| 탐색 다양성 | 높음 | 낮음 | 중간 | 높음 |
+| 학습 안정성 | 낮음 | 높음 | 높음 | 중간 |
+| 구현 복잡도 | 낮음 | 중간 | 중간 | 높음 |
+
+## 자기 증류의 한계
+
+**에코 챔버 효과(echo chamber effect)**: 모델이 초기에 잘못된 전략을 배우면 자기 증류가 그 전략을 강화할 수 있습니다. 외부 보상 신호의 역할이 중요합니다.
+
+**다양성 붕괴(diversity collapse)**: 자기 증류가 반복될수록 고보상 출력의 패턴이 수렴하여 탐색 다양성이 감소합니다.
+
+**초기 품질 의존성**: 자기 증류의 효과는 초기 모델의 품질에 크게 의존합니다. 기반 모델이 너무 약하면 증류할 고보상 궤적 자체가 충분하지 않다.
+
+## 정리
+
+자기 증류 기반 RL은 외부 교사 모델이나 인간 피드백 없이도 효과적인 정책 개선을 가능하게 합니다. SDPO는 GRPO 대비 6배 빠른 수렴과 10%p 이상의 성능 향상을 달성하며, Self-Distilled RLVR은 더 높은 수렴 천장을 제공합니다. Sample Routing을 통한 GRPO와 SDPO의 통합은 탐색과 활용의 균형을 적응적으로 조절합니다. 이 방향은 자율적 자기 개선 AI 시스템의 실현 가능성을 높이는 중요한 진전입니다.

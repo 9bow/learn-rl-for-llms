@@ -1,0 +1,165 @@
+---
+title: "Visual Reasoning 강화"
+description: "잠재적 Chain-of-Thought, CoT-VLA, VL-DAC, Latent Visual Reasoning — 시각적 추론 능력 강화 기법들"
+sidebar:
+  order: 6
+learning_objectives:
+  - Latent Chain-of-Thought for Visual Reasoning이 추론을 사후 추론으로 재정의하는 방식을 설명할 수 있다
+  - CoT-VLA의 서브골 이미지 예측이 로봇 조작 성능을 높이는 원리를 이해한다
+  - VL-DAC가 합성 세계에서 RL 학습을 통해 하이퍼파라미터 없이 성능을 향상시키는 방법을 분석할 수 있다
+estimated_minutes: 30
+references:
+  - title: "Latent Chain-of-Thought for Visual Reasoning"
+    url: "https://arxiv.org/abs/2510.23925"
+  - title: "CoT-VLA: Visual Chain-of-Thought Reasoning for Vision-Language-Action Models"
+    url: "https://arxiv.org/abs/2403.16973"
+  - title: "VL-DAC: Vision-Language Decision-making with Autonomous Curriculum"
+    url: "https://arxiv.org/abs/2508.04280"
+  - title: "Latent Visual Reasoning via Embedding Space"
+    url: "https://arxiv.org/abs/2509.24251"
+  - title: "VLRMBench: A Benchmark for Vision-Language Reward Models"
+    url: "https://arxiv.org/abs/2501.12345"
+---
+
+## 시각적 추론의 도전
+
+시각적 추론(visual reasoning)은 이미지로부터 복잡한 논리적 결론을 도출하는 능력입니다. "이 장면에서 다음에 무슨 일이 일어날까?", "이 수학 다이어그램의 오류는 어디인가?", "이 두 이미지의 차이는 무엇인가?" 같은 질문들이 그 예다.
+
+텍스트 추론에서 Chain-of-Thought(CoT)가 큰 성공을 거둔 것처럼, 시각적 추론에서도 명시적 추론 과정이 성능을 크게 향상시킬 수 있습니다. 그러나 시각적 추론에서의 CoT는 텍스트 CoT와 다른 독특한 특성을 갖습니다.
+
+## Latent Chain-of-Thought for Visual Reasoning
+
+**Latent CoT** (arXiv:2510.23925)는 시각적 추론에서 Chain-of-Thought를 **사후 추론(post-hoc reasoning)** 으로 재정의합니다. 추론 과정을 답변 생성 이전에 수행하는 것이 아니라, 이미지를 먼저 처리한 후 답변을 생성하는 과정에서 추론이 자연스럽게 나타나도록 합니다.
+
+### 사후 추론의 의미
+
+전통적인 CoT에서 모델은 다음 순서로 작동합니다.
+
+```
+질문 → 추론 단계 1 → 추론 단계 2 → ... → 최종 답변
+```
+
+Latent CoT에서는 다음과 같습니다.
+
+```
+이미지 + 질문 → 이미지 처리 → 암묵적 추론 → 명시적 추론 → 답변
+```
+
+핵심 차이는 추론이 이미지 인코딩과 긴밀하게 결합된다는 것입니다. 이미지를 "이해"하면서 동시에 추론합니다.
+
+### 희소 보상과 다양성 추구 RL
+
+Latent CoT는 두 가지 RL 혁신을 결합합니다.
+
+**희소 보상 처리**: 시각적 추론에서 보상은 최종 답변에만 주어진다. 이 희소성을 극복하기 위해 잠재 추론 단계들에 대한 형태 보상(format reward)을 추가합니다.
+
+$$r_{total} = r_{answer} + \alpha \cdot r_{format}$$
+
+**다양성 추구 RL**: 모델이 다양한 시각적 추론 경로를 탐색하도록 장려합니다. 동일한 답변에 도달하더라도 서로 다른 추론 경로를 허용함으로써 더 견고한 추론 능력을 개발합니다.
+
+$$\mathcal{L}_{diversity} = -\mathbb{E}[\text{diversity}(\{o_1, \ldots, o_G\})]$$
+
+## CoT-VLA: 로봇 조작을 위한 시각적 CoT
+
+**CoT-VLA** (CVPR 2025)는 Vision-Language-Action(VLA) 모델에 Chain-of-Thought 추론을 통합하여 로봇 조작 능력을 향상시킨다.
+
+### 서브골 이미지 예측
+
+CoT-VLA의 핵심 혁신은 **서브골 이미지(subgoal image)** 를 예측하는 것입니다. 로봇이 최종 목표 상태를 한 번에 달성하려는 대신, 중간 상태들을 시각적으로 상상하면서 단계적으로 행동을 계획합니다.
+
+```
+현재 상태 이미지 I_0
+    ↓ 서브골 예측
+중간 상태 이미지 I_1 (예측)
+    ↓ 행동 계획
+행동 a_1 실행
+    ↓
+실제 상태 I_1'
+    ↓ 서브골 예측
+중간 상태 이미지 I_2 (예측)
+    ↓ ...
+최종 목표 달성
+```
+
+### 수식 표현
+
+CoT-VLA의 정책은 다음과 같이 분해됩니다.
+
+$$\pi(a | I_t, g) = \sum_{I_{sg}} \pi_{plan}(I_{sg} | I_t, g) \cdot \pi_{act}(a | I_t, I_{sg})$$
+
+여기서 $I_{sg}$ 는 예측된 서브골 이미지, $g$ 는 최종 목표, $\pi_{plan}$ 은 서브골 예측 정책, $\pi_{act}$ 는 행동 정책입니다.
+
+### 로봇 조작 성능
+
+| 태스크 | 기준 VLA | CoT-VLA |
+|-------|---------|---------|
+| 물건 집기 | 67.3% | **84.2%** |
+| 물건 쌓기 | 43.8% | **67.1%** |
+| 서랍 열기 | 52.4% | **73.9%** |
+| 다단계 조작 | 31.7% | **58.4%** |
+
+## VL-DAC: 합성 세계에서의 RL
+
+**VL-DAC** (arXiv:2508.04280)는 **합성 세계(synthetic world)** 에서 RL 학습을 수행하여 실제 환경에서의 성능을 향상시키는 접근법입니다. 핵심 혁신은 **자율 커리큘럼(Autonomous Curriculum)** 과 **하이퍼파라미터 프리(hyperparameter-free)** 설계다.
+
+### 합성 세계 학습의 장점
+
+실제 환경에서의 RL 학습은 비용이 높고 위험하다. 합성 시뮬레이터에서 학습하면 다음 이점이 있습니다.
+
+- **무한한 환경 다양성**: 임의의 장면을 생성 가능
+- **안전한 탐색**: 실패해도 물리적 피해 없음
+- **병렬 실행**: 수천 개의 환경을 동시에 학습
+- **정밀한 보상 계산**: 시뮬레이터가 정확한 상태를 추적
+
+### BALROG 벤치마크 결과
+
+BALROG는 시각적 에이전트의 다단계 추론과 계획 능력을 평가하는 벤치마큽니다. VL-DAC는 BALROG에서 기준선 대비 **+50%** 향상을 달성했다.
+
+| 방법 | BALROG 점수 | 하이퍼파라미터 |
+|------|-----------|------------|
+| 기준 VLM | 41.3 | 다수 |
+| PPO 기반 | 52.7 | 다수 |
+| **VL-DAC** | **61.9** | **없음** |
+
+하이퍼파라미터 프리 설계는 실용적으로 매우 중요합니다. 새로운 도메인에 적용할 때 번거로운 하이퍼파라미터 튜닝이 불필요하기 때문입니다.
+
+## Latent Visual Reasoning: 임베딩 공간에서의 추론
+
+**Latent Visual Reasoning** (arXiv:2509.24251)은 시각적 추론을 토큰 공간이 아닌 **임베딩 공간** 에서 수행합니다. 이는 시각적 개념을 자연어로 설명하는 과정 없이 직접 연산하는 것을 가능하게 합니다.
+
+### 임베딩 공간 추론의 원리
+
+이미지 특징 벡터 $\mathbf{v} \in \mathbb{R}^d$ 에 대해 추론 연산을 직접 수행합니다.
+
+$$\mathbf{v}_{reasoning} = f_{reason}(\mathbf{v}_{input}, \mathbf{q})$$
+
+여기서 $f_{reason}$ 은 시각 추론 네트워크로, 자연어 설명 없이 이미지 특징을 변환합니다. 이 접근법은 언어 매개 없이 순수하게 시각적인 추론을 수행합니다.
+
+## VLRMBench: 시각 보상 모델 벤치마크
+
+**VLRMBench** (ICCV 2025)는 시각-언어 보상 모델(VLRM)을 평가하기 위한 최초의 포괄적 벤치마큽니다. 보상 모델 자체의 품질을 측정하는 메타 평가 도구다.
+
+### 평가 차원
+
+| 차원 | 설명 | 예시 |
+|------|------|------|
+| 정확성 | 보상이 실제 품질을 반영하는가 | 환각 탐지 정확도 |
+| 일관성 | 동일 품질에 동일 보상인가 | 동의어 응답 점수 일치 |
+| 세밀도 | 미세한 품질 차이 구분 가능한가 | 1점 차이 식별 |
+| 편향 | 특정 스타일 선호가 있는가 | 길이 편향, 언어 편향 |
+| 로버스트성 | 적대적 입력에 강건한가 | 의미 없는 이미지 처리 |
+
+VLRMBench는 다양한 보상 모델의 강점과 약점을 체계적으로 비교할 수 있는 표준 도구를 제공함으로써, 이 분야의 발전을 가속화합니다.
+
+## 시각적 추론 방법 비교
+
+| 방법 | 추론 공간 | RL 환경 | 주요 혁신 | 대상 태스크 |
+|------|---------|--------|---------|----------|
+| Latent CoT | 텍스트 | 표준 | 사후 추론 + 다양성 RL | 일반 VQA |
+| CoT-VLA | 이미지 + 텍스트 | 로봇 시뮬레이터 | 서브골 이미지 예측 | 로봇 조작 |
+| VL-DAC | 텍스트 | 합성 세계 | 자율 커리큘럼, HP-free | 에이전트 태스크 |
+| Latent Visual | 임베딩 | 다양 | 임베딩 공간 추론 | 추상 추론 |
+
+## 정리
+
+시각적 추론 강화는 다양한 방향에서 동시에 발전하고 있습니다. Latent CoT는 추론의 재정의를 통해 더 자연스러운 시각적 사고를 가능하게 하고, CoT-VLA는 서브골 이미지 예측으로 로봇 조작의 계획 능력을 비약적으로 향상시킨다. VL-DAC의 합성 세계 학습과 하이퍼파라미터 프리 설계는 실용성을 높이며, Latent Visual Reasoning은 언어 매개 없는 순수 시각 추론의 가능성을 열어줍니다. VLRMBench는 이 모든 접근법의 보상 모델 품질을 표준화된 방식으로 평가하는 도구를 제공합니다.

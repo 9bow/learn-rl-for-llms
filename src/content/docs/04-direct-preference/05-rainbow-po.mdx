@@ -1,0 +1,93 @@
+---
+title: "Rainbow PO와 최신 변형들"
+description: "Rainbow PO를 포함한 다양한 DPO 변형 알고리즘의 분류 체계와 각 방법의 핵심 기여를 학습합니다."
+sidebar:
+  order: 5
+learning_objectives:
+  - "Rainbow PO가 여러 PO 개선 기법을 통합하는 프레임워크 구조를 이해한다"
+  - "DPO 변형들을 포인트와이즈 vs 쌍대, 참조 모델 유무 기준으로 분류할 수 있다"
+  - "MinMax-DPO, MallowsPO, BCO 등 최신 변형들의 핵심 아이디어를 설명할 수 있다"
+estimated_minutes: 25
+references:
+  - title: "Rainbow DPO: Breaking the Pareto Frontier in Alignment"
+    authors: "Zheng, R., et al."
+    year: 2025
+    url: "https://arxiv.org/abs/2410.04203"
+  - title: "A Survey of Direct Preference Optimization"
+    authors: "Chen, Z., et al."
+    year: 2025
+    url: "https://arxiv.org/abs/2410.15595"
+  - title: "From r to Q*: Your Language Model is Secretly a Q-Function"
+    authors: "Rafailov, R., et al."
+    year: 2024
+    url: "https://arxiv.org/abs/2404.12358"
+---
+
+## DPO 변형의 폭발적 성장
+
+DPO가 발표된 이후 2년여 동안 수십 개의 변형 알고리즘이 등장했다. 각각은 DPO의 서로 다른 약점(과적합, 분포 이동, 참조 모델 의존성, 데이터 효율 등)을 해결하려 합니다. 2025년 발표된 종합 서베이(arXiv:2410.15595)는 이 변형들을 체계적으로 분류하고 비교합니다.
+
+## DPO 변형의 분류 체계
+
+DPO 변형은 크게 두 축으로 분류됩니다.
+
+**피드백 형식 기준**
+- **쌍대(Pairwise)**: 선호/비선호 응답 쌍을 사용 — DPO, IPO, SimPO, ORPO
+- **포인트와이즈(Pointwise)**: 개별 응답에 스칼라 점수 또는 이진 레이블 — KTO, BCO, RLVR
+
+**참조 모델 유무 기준**
+- **참조 모델 사용**: DPO, IPO, KTO
+- **참조 모델 없음**: SimPO, ORPO, DAPO
+
+이 두 축의 조합으로 4개의 사분면이 형성되며, 각 사분면은 서로 다른 데이터 수집 용이성과 구현 복잡도 트레이드오프를 가집니다.
+
+## Rainbow PO (ICLR 2025)
+
+**Rainbow PO** 는 기존 DPO 변형들의 개선 기법을 체계적으로 분석하고, 서로 보완적인 기법들을 통합한 프레임워큽니다. "Rainbow"라는 이름은 여러 색(기법)이 하나의 빛(통합 방법론)으로 합쳐진다는 의미를 담는다.
+
+Rainbow PO가 통합하는 핵심 기법들:
+
+1. **길이 정규화**: SimPO에서 가져온 평균 로그 확률 보상
+2. **마진 보상**: 선호/비선호 응답 간 최소 마진 강제
+3. **SFT 정규화**: 선호 응답에 대한 지도 학습 손실 추가
+4. **부정적 기울기 방지**: 선호 응답의 확률이 감소하는 역효과 차단
+
+Rainbow PO는 AlpacaEval 2와 MT-Bench에서 단일 기법들의 Pareto 프런티어를 돌파하는 성능을 보였다고 주장합니다.
+
+## 주요 최신 변형들
+
+**MinMax-DPO**: 최악의 경우(minimax) 보상을 최대화하는 방식으로, 분포 이동에 더 강건하다. 참조 모델과 학습 모델의 보상 차이를 최소-최대 관점에서 최적화합니다.
+
+**MallowsPO**: Mallows 순열 모델에서 영감받아 선호 순위(ranking)를 직접 다루는 방법. 단순 쌍대 비교보다 풍부한 순서 정보를 활용합니다.
+
+**GDPO (Generalized DPO)**: $f$-발산 계열로 DPO를 일반화. KL 발산 대신 다양한 발산 함수를 사용해 정규화 강도를 유연하게 조절합니다.
+
+**BCO (Binary Classification Optimization)**: 이진 분류 관점에서 선호 최적화를 재정의. 각 응답을 독립적으로 평가하여 KTO와 유사하지만 다른 이론적 기반을 가집니다.
+
+**Cal-DPO (Calibrated DPO)**: DPO의 보상 추정이 편향되어 있음을 지적하고, 보정(calibration)을 통해 더 정확한 보상 추정을 수행합니다.
+
+## 종합 비교표
+
+| 방법 | 참조 모델 | 피드백 형식 | 주요 기여 | 발표 연도 |
+|------|---------|-----------|---------|---------|
+| DPO | 필요 | 쌍대 | 보상 모델 제거 | 2023 |
+| IPO | 필요 | 쌍대 | 과적합 방지 | 2024 |
+| KTO | 필요 | 이진 | 쌍대 데이터 불필요 | 2024 |
+| ORPO | 불필요 | 쌍대 | SFT 통합 | 2024 |
+| SimPO | 불필요 | 쌍대 | 길이 정규화 | 2024 |
+| MinMax-DPO | 필요 | 쌍대 | 분포 강건성 | 2024 |
+| MallowsPO | 필요 | 순위 | 순열 모델 | 2024 |
+| BCO | 필요 | 이진 | 이진 분류 관점 | 2024 |
+| Rainbow PO | 선택적 | 쌍대 | 기법 통합 | 2025 |
+
+## 실용적 선택 가이드
+
+현장에서 방법을 선택할 때는 다음 기준을 따릅니다.
+
+- **메모리 제약이 심할 때**: SimPO 또는 ORPO (참조 모델 불필요)
+- **쌍대 데이터 수집이 어려울 때**: KTO 또는 BCO (이진 레이블로 충분)
+- **과적합이 문제일 때**: IPO 또는 Rainbow PO
+- **최고 성능이 필요할 때**: Rainbow PO 또는 최신 통합 방법
+- **빠른 구현이 필요할 때**: DPO (가장 풍부한 라이브러리 지원)
+
+DPO 생태계는 계속 확장 중이며, 각 변형의 이론적 기여를 이해하는 것이 적절한 방법 선택의 핵심입니다.

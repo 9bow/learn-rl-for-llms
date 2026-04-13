@@ -1,0 +1,153 @@
+---
+title: "멀티모달 RLHF"
+description: "LLaVA-RLHF, RLHF-V, Generative RLHF-V — 시각-언어 모델의 인간 피드백 기반 강화학습"
+sidebar:
+  order: 4
+learning_objectives:
+  - LLaVA-RLHF의 Fact-RLHF가 이미지 캡션과 MCQ로 보상을 보정하는 방식을 설명할 수 있다
+  - RLHF-V의 세그먼트 수준 교정 피드백과 Dense DPO(DDPO)의 작동 원리를 이해한다
+  - Generative RLHF-V의 생성적 보상 모델이 판별적 보상 모델과 어떻게 다른지 비교할 수 있다
+estimated_minutes: 32
+references:
+  - title: "Aligning Large Multimodal Models with Factually Augmented RLHF"
+    url: "https://arxiv.org/abs/2309.14525"
+  - title: "RLHF-V: Towards Trustworthy MLLMs via Behavior Alignment from Fine-Grained Correctional Human Feedback"
+    url: "https://arxiv.org/abs/2312.00849"
+  - title: "Generative RLHF-V: Improving Visual Alignment via Generative Reward Models"
+    url: "https://arxiv.org/abs/2505.18531"
+  - title: "Training language models to follow instructions with human feedback"
+    url: "https://arxiv.org/abs/2203.02155"
+---
+
+## 멀티모달 RLHF의 필요성
+
+텍스트 전용 LLM에서 RLHF(Reinforcement Learning from Human Feedback)는 유해 출력 감소와 사용자 선호 정렬에 큰 성공을 거두었다. VLM에서도 동일한 문제가 더 복잡한 형태로 존재합니다. 이미지를 보고 없는 객체를 설명하거나(시각적 환각), 이미지와 무관한 텍스트를 생성하거나, 시각적 맥락을 무시하는 문제들이 그것입니다.
+
+멀티모달 RLHF는 이러한 문제를 **인간의 시각적 선호** 를 학습 신호로 활용하여 해결하려 합니다. 그러나 멀티모달 선호 데이터 수집은 텍스트보다 훨씬 복잡하다. 평가자가 이미지와 텍스트를 함께 이해해야 하기 때문입니다.
+
+## LLaVA-RLHF: Factually Augmented RLHF
+
+**LLaVA-RLHF** (Sun et al., 2023)는 멀티모달 RLHF의 핵심 과제인 **사실적 일관성(factual consistency)** 문제를 해결하기 위해 보상 모델의 학습 방식을 혁신했다.
+
+### 기존 멀티모달 RLHF의 문제
+
+표준 RLHF에서 인간 평가자는 두 응답을 비교하여 선호를 표시합니다. 그러나 이미지-텍스트 쌍에서는 다음 문제가 생긴다.
+
+- 이미지에서 무엇이 올바른지 평가자가 모를 수 있습니다.
+- 시각적 세부 사항을 텍스트로 확인하기 어렵습니다.
+- 환각된 내용이 그럴듯하게 보일 수 있습니다.
+
+### Fact-RLHF 보상 보정
+
+LLaVA-RLHF는 **사실 증강(factual augmentation)** 으로 이 문제를 해결합니다. 인간 선호 레이블에 더해 두 가지 자동 보정 신호를 추가합니다.
+
+**이미지 캡션 보정**: 이미지의 상세한 캡션을 생성하고, 모델 응답이 캡션 내용과 일치하는지 확인합니다.
+
+$$r_{caption}(o, I) = \text{similarity}(o, \text{caption}(I))$$
+
+**MCQ(Multiple Choice Question) 보정**: 이미지에 관한 객관식 문제를 자동 생성하고 모델이 올바르게 답하는지 확인합니다.
+
+$$r_{MCQ}(o, I, q, a^*) = \mathbf{1}[\text{answer}(o, q) = a^*]$$
+
+최종 보상은 인간 선호 점수와 사실적 보정 신호의 가중 합입니다.
+
+$$r_{total} = r_{human} + \alpha \cdot r_{caption} + \beta \cdot r_{MCQ}$$
+
+### 성능
+
+GPT-4를 심판으로 활용한 상대 평가에서 LLaVA-RLHF는 기준 모델 대비 **96.6%** 의 승률을 기록했다. 특히 환각 비율이 크게 감소했다.
+
+## RLHF-V: 세그먼트 수준 교정 피드백
+
+**RLHF-V** (Yu et al., CVPR 2024)는 멀티모달 RLHF에서 피드백의 **세밀도(granularity)** 를 높이는 데 집중합니다. 전체 응답에 대한 이진 선호가 아니라, **어느 부분이 잘못되었는지** 를 문장 수준에서 교정합니다.
+
+### 세그먼트 수준 교정 피드백
+
+인간 평가자는 모델 응답의 각 문장(세그먼트)에 대해 다음 중 하나로 레이블합니다.
+
+- **올바름**: 이미지와 일치하는 정확한 설명
+- **환각**: 이미지에 없는 내용을 주장
+- **교정**: 환각된 부분의 올바른 버전 제시
+
+예시:
+```
+원본: "테이블에 빨간 사과 두 개와 파란 컵이 있습니다."
+(이미지: 사과 두 개만 있음)
+
+세그먼트 레이블:
+- "테이블에 빨간 사과 두 개" → 올바름
+- "파란 컵이 있습니다" → 환각 → 교정: "컵은 없습니다"
+```
+
+### Dense DPO (DDPO)
+
+세그먼트 수준 피드백을 학습에 활용하기 위해 RLHF-V는 **Dense DPO(DDPO)** 를 제안합니다. 표준 DPO는 전체 응답 쌍에 대한 손실을 계산하지만, DDPO는 **환각된 세그먼트에만** 손실을 집중합니다.
+
+$$\mathcal{L}_{DDPO} = -\sum_{s \in \mathcal{S}_{hal}} \log \sigma\left(\beta \log \frac{\pi_\theta(s^{cor} | x, I)}{\pi_{ref}(s^{cor} | x, I)} - \beta \log \frac{\pi_\theta(s^{hal} | x, I)}{\pi_{ref}(s^{hal} | x, I)}\right)$$
+
+여기서 $\mathcal{S}_{hal}$ 은 환각 세그먼트 집합, $s^{hal}$ 은 환각된 원문, $s^{cor}$ 은 교정된 버전입니다.
+
+### OmniLMM-12B 결과
+
+DDPO로 훈련된 **OmniLMM-12B** 는 MMHal-Bench에서 1위를 달성했다.
+
+| 모델 | MMHal-Bench 점수 | 환각 비율 |
+|------|---------------|---------|
+| LLaVA-1.5-13B | 2.1 | 34.2% |
+| InstructBLIP-13B | 2.3 | 31.7% |
+| GPT-4V | 3.5 | 13.6% |
+| **OmniLMM-12B (DDPO)** | **3.7** | **11.2%** |
+
+## Generative RLHF-V: 생성적 보상 모델
+
+**Generative RLHF-V** (arXiv:2505.18531)는 보상 모델 자체의 패러다임을 바꾼다. 기존 보상 모델은 **판별적(discriminative)** 입니다. 입력-출력 쌍을 받아 스칼라 점수를 출력합니다. Generative RLHF-V는 **생성적(generative) 보상 모델** 을 사용합니다.
+
+### 판별적 vs 생성적 보상 모델
+
+| 특성 | 판별적 보상 모델 | 생성적 보상 모델 |
+|------|--------------|--------------|
+| 출력 형태 | 스칼라 점수 | 텍스트 + 점수 |
+| 추론 과정 | 불투명 | 명시적 추론 제공 |
+| 해석 가능성 | 낮음 | 높음 |
+| 일반화 능력 | 제한적 | 높음 |
+| 훈련 데이터 요구 | 많음 | 적음 |
+| 계산 비용 | 낮음 | 높음 |
+
+### 생성적 보상 메커니즘
+
+생성적 보상 모델은 먼저 이미지와 응답에 대해 평가 이유를 자연어로 생성한 후, 점수를 산출합니다.
+
+```
+[입력]: 이미지 I + 모델 응답 o
+[생성]:
+"이 응답은 이미지의 주요 객체(사과 두 개)를 올바르게
+인식했습니다. 그러나 색상을 '빨간'으로 설명했는데,
+이미지의 사과는 녹색입니다. 이 오류로 인해..."
+[점수]: 3.2/5.0
+```
+
+이 방식은 단순히 점수를 매기는 것보다 더 정확하고 일관된 평가를 가능하게 합니다.
+
+### 7개 벤치마크 결과
+
+Generative RLHF-V는 7개 멀티모달 벤치마크에서 기존 방법 대비 평균 **18.1%** 향상을 달성했다.
+
+| 벤치마크 | RLHF-V | LLaVA-RLHF | Generative RLHF-V |
+|---------|--------|-----------|------------------|
+| MMHal-Bench | 3.7 | 3.4 | **4.4** |
+| POPE | 87.4% | 85.9% | **91.2%** |
+| MMBench | 76.3% | 74.8% | **83.1%** |
+| ScienceQA | 82.7% | 81.3% | **89.4%** |
+
+## 멀티모달 RLHF 방법 비교
+
+| 방법 | 피드백 유형 | 보상 세밀도 | 환각 감소 | 일반 성능 |
+|------|---------|----------|---------|---------|
+| 표준 RLHF | 전체 선호 | 낮음 | 중간 | 중간 |
+| LLaVA-RLHF (Fact-RLHF) | 사실 보정 | 중간 | 높음 | 높음 |
+| RLHF-V (DDPO) | 세그먼트 교정 | 높음 | 매우 높음 | 높음 |
+| Generative RLHF-V | 생성적 추론 | 매우 높음 | 매우 높음 | 매우 높음 |
+
+## 정리
+
+멀티모달 RLHF는 VLM의 시각적 환각 문제를 해결하는 가장 효과적인 접근법 중 하나다. LLaVA-RLHF의 사실 보정, RLHF-V의 세그먼트 수준 피드백과 Dense DPO, Generative RLHF-V의 생성적 보상 모델은 피드백의 세밀도와 정확도를 점진적으로 높여왔다. 이 발전은 VLM이 실제 응용 환경에서 신뢰할 수 있는 멀티모달 어시스턴트로 기능하기 위한 핵심 기반이 됩니다.

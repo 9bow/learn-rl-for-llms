@@ -1,0 +1,91 @@
+---
+title: "RLHF 개요와 파이프라인"
+description: "RLHF 3단계 파이프라인(SFT, 보상 모델, PPO)의 전체 구조와 데이터 요구사항, 비용 구조를 학습합니다."
+sidebar:
+  order: 1
+learning_objectives:
+  - "RLHF의 3단계 파이프라인을 각 단계의 입출력과 함께 순서대로 설명할 수 있다"
+  - "각 단계에서 필요한 데이터의 종류와 수집 방법을 구체적으로 설명할 수 있다"
+  - "RLHF 파이프라인의 전체 비용 구조와 병목 지점을 파악할 수 있다"
+estimated_minutes: 30
+references:
+  - title: "Deep Reinforcement Learning from Human Preferences"
+    authors: "Christiano, P., Leike, J., Brown, T. B., Martic, M., Legg, S., & Amodei, D."
+    year: 2017
+    url: "https://arxiv.org/abs/1706.03741"
+  - title: "Training language models to follow instructions with human feedback"
+    authors: "Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al."
+    year: 2022
+    url: "https://arxiv.org/abs/2203.02155"
+  - title: "Learning to summarize with human feedback"
+    authors: "Stiennon, N., Ouyang, L., Wu, J., Ziegler, D. M., Lowe, R., et al."
+    year: 2020
+    url: "https://arxiv.org/abs/2009.01325"
+---
+
+## RLHF의 탄생 배경
+
+**RLHF(Reinforcement Learning from Human Feedback)** 는 Christiano et al. (2017)의 "Deep RL from Human Preferences" 논문에서 제안된 개념으로, 인간의 선호를 강화학습의 보상 신호로 활용하는 방법론입니다. 초기에는 아타리 게임이나 로봇 이동과 같은 전통적 RL 환경에서 보상 함수 설계의 어려움을 해결하는 목적으로 개발되었습니다.
+
+이 아이디어가 LLM에 본격적으로 적용된 것은 Stiennon et al. (2020)의 "Learning to summarize with human feedback"과 Ouyang et al. (2022)의 InstructGPT를 통해서입니다. InstructGPT는 RLHF가 대규모 언어 모델의 정렬 문제를 실질적으로 해결할 수 있음을 보여준 이정표적 연구입니다.
+
+## RLHF 3단계 파이프라인
+
+RLHF는 세 단계로 구성된 파이프라인입니다. 각 단계는 서로 다른 유형의 데이터와 목적을 가집니다.
+
+### 1단계: 지도 미세조정 (SFT)
+
+**목적**: 사전학습 모델에 지시어 따르기 능력을 부여합니다.
+
+**데이터**: 인간 전문가가 작성한 (프롬프트, 고품질 응답) 쌍 $\{(x_i, y_i^*)\}$
+
+**학습 목표**:
+$$\mathcal{L}_{SFT}(\theta) = -\mathbb{E}_{(x, y^*) \sim \mathcal{D}_{SFT}} \left[ \sum_t \log \pi_\theta(y^*_t \mid x, y^*_{<t}) \right]$$
+
+**출력**: SFT 모델 $\pi_{SFT}$. 이 모델은 이후 두 가지 역할을 합니다: (a) 보상 모델 초기화, (b) RL 단계의 레퍼런스 모델
+
+InstructGPT에서는 약 13,000개의 프롬프트-응답 쌍을 수집했으며, 주석자는 OpenAI API를 통해 실제 사용자가 제출한 프롬프트를 기반으로 응답을 작성했습니다.
+
+### 2단계: 보상 모델 (RM) 학습
+
+**목적**: 인간의 선호를 수치 점수로 예측하는 모델을 학습합니다.
+
+**데이터**: 동일 프롬프트에 대한 여러 응답의 순위 비교 $\{(x, y_w, y_l)\}$ (선호 응답 $y_w$, 비선호 응답 $y_l$)
+
+**학습 목표** (Bradley-Terry 모델 기반):
+$$\mathcal{L}_{RM}(\phi) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}_{RM}} \left[ \log \sigma\left(r_\phi(x, y_w) - r_\phi(x, y_l)\right) \right]$$
+
+**출력**: 보상 모델 $r_\phi$. 프롬프트-응답 쌍 $(x, y)$를 입력받아 스칼라 점수를 출력합니다.
+
+InstructGPT에서는 약 33,000개의 비교 쌍을 수집했습니다. 비교 데이터가 전문가 작성 응답보다 저렴하게 수집 가능하므로, 데이터 규모를 더 크게 확보할 수 있었습니다.
+
+### 3단계: PPO로 RL 최적화
+
+**목적**: 보상 모델을 환경으로 사용하여 정책을 최적화합니다.
+
+**데이터**: 추가 프롬프트 $\{x_j\}$ (응답은 현재 정책이 생성)
+
+**학습 목표**:
+$$\max_{\pi_\theta} \mathbb{E}_{x \sim \mathcal{D}, y \sim \pi_\theta(\cdot|x)} \left[ r_\phi(x, y) - \beta \log \frac{\pi_\theta(y \mid x)}{\pi_{ref}(y \mid x)} \right]$$
+
+**출력**: RLHF 정책 $\pi_{RLHF}$. SFT 모델 대비 인간 선호도가 향상된 최종 모델.
+
+InstructGPT에서는 약 31,000개의 추가 프롬프트를 사용하여 PPO 학습을 수행했습니다.
+
+## 전체 데이터 요구사항 요약
+
+| 단계 | 데이터 유형 | InstructGPT 규모 | 주석 난이도 | 주요 비용 |
+|------|------------|-----------------|------------|----------|
+| SFT | (프롬프트, 응답) 쌍 | ~13K | 높음 (전문가 작성) | 주석자 시간 |
+| RM | (프롬프트, 응답A, 응답B, 선호) | ~33K | 중간 (비교 판단) | 주석자 시간 |
+| PPO | 프롬프트만 | ~31K | 없음 | 모델 추론/학습 |
+
+## RLHF의 비용 구조
+
+RLHF의 비용은 크게 두 범주로 나뉩니다:
+
+**인적 비용**: 주석자 채용, 교육, 품질 관리. SFT 데이터는 전문 지식이 필요한 경우 비용이 급증합니다(의료, 법률, 코딩 등). 비교 주석은 상대적으로 비용이 낮지만, 주석자 간 일관성 확보가 중요합니다.
+
+**계산 비용**: PPO 단계에서 Actor, Critic, Reward Model, Reference Model 4개를 동시에 메모리에 유지해야 합니다. 70B 파라미터 모델 기준 각각 약 140GB(bf16)이므로, 전체 560GB+ 이상의 GPU 메모리가 필요합니다. 이는 실제 배포 시 가장 큰 병목입니다.
+
+이러한 높은 비용은 DPO 같은 경량 대안의 개발을 촉진했으며, RLAIF(AI 피드백 기반 RL)를 통한 인적 비용 절감 연구가 활발히 진행되고 있습니다.

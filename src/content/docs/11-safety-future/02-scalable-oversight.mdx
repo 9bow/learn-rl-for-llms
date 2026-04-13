@@ -1,0 +1,150 @@
+---
+title: "Scalable Oversight"
+description: "약한 모델이 강한 모델을 감독하는 문제와 Debate, Hierarchical Verification 등 Scalable Oversight 기법을 학습합니다."
+sidebar:
+  order: 2
+learning_objectives:
+  - "Scalable Oversight의 핵심 문제인 감독자-피감독자 능력 역전을 설명할 수 있다"
+  - "Debate와 Consultancy 접근법의 차이와 각각의 장단점을 비교할 수 있다"
+  - "EAS 지표와 Scalable Oversight 벤치마크를 통해 연구 진척을 평가할 수 있다"
+estimated_minutes: 35
+references:
+  - title: "Scalable Oversight via Delegated Debate and Hierarchical Verification"
+    url: "https://arxiv.org/abs/2407.04622"
+  - title: "Knowledge Divergence and Debate Effectiveness"
+    url: "https://arxiv.org/abs/2603.05293"
+  - title: "Scaling Laws for Scalable Oversight"
+    url: "https://arxiv.org/abs/2504.18530"
+  - title: "Scalable Oversight Benchmark"
+    url: "https://arxiv.org/abs/2504.03731"
+---
+
+## Scalable Oversight의 핵심 문제
+
+현재 AI 시스템은 특정 도메인에서 인간 전문가를 능가하기 시작했습니다. 이는 근본적인 감독 문제를 야기합니다. **인간이 자신보다 뛰어난 AI의 출력물을 어떻게 평가할 수 있을까?**
+
+수학 증명을 검증하거나, 복잡한 코드베이스의 보안 취약점을 발견하거나, 전문적인 법률 분석을 평가할 때 — 감독자가 피감독자보다 능력이 낮으면 올바른 피드백을 줄 수 없습니다.
+
+**Scalable Oversight** 는 이 근본적인 한계를 극복하는 방법론의 집합입니다. 핵심 질문은 다음과 같습니다:
+
+> "약한 감독자(weak supervisor)가 강한 AI 에이전트(strong agent)의 출력물을 신뢰성 있게 평가하는 방법이 있는가?"
+
+## Debate: 진실 도출을 위한 토론
+
+**Debate** (NeurIPS 2024, arXiv:2407.04622)는 두 AI 에이전트가 서로 상반된 주장을 하고, 인간 판사가 이를 평가하는 구조입니다.
+
+### 핵심 가정
+
+Debate의 이론적 근거는 다음 비대칭에 있습니다:
+- **진실을 방어하기는 쉽다**: 참인 주장은 일관성이 있고 검증 가능한 세부 사항을 포함합니다.
+- **거짓말을 방어하기는 어렵다**: 거짓 주장은 반박될 때 일관성이 무너집니다.
+
+따라서 두 에이전트 중 하나가 진실을 주장하고 하나가 거짓을 주장하면, 유능한 에이전트들의 토론에서 거짓말쟁이는 결국 모순에 빠집니다.
+
+### Debate의 구조
+
+```
+[에이전트 A] 주장 → [에이전트 B] 반박 → [A] 재반박 → [B] 재반박
+                                    ↓
+                              [인간 판사] 최종 평가
+```
+
+판사는 두 에이전트의 주장을 비교하여 어느 쪽이 더 일관되고 설득력 있는지를 판단합니다. 핵심은 판사가 토픽 자체에 대한 전문 지식 없이도 **논증의 질** 을 평가할 수 있다는 것입니다.
+
+### Delegated Debate와 Hierarchical Verification
+
+대규모 복잡한 태스크에서는 단순한 Debate보다 계층적 구조가 필요합니다.
+
+**Delegated Debate**: 메인 에이전트가 하위 에이전트들에게 특정 주장의 검증을 위임합니다. 각 하위 에이전트의 결과에 대해 다시 Debate가 이루어지는 재귀적 구조입니다.
+
+**Hierarchical Verification**: 복잡한 증명이나 분석을 작은 단계로 분해하고, 각 단계를 독립적으로 검증합니다:
+
+$$\text{Verify}(P) = \bigwedge_{i=1}^{n} \text{Verify}(P_i)$$
+
+여기서 $P$는 전체 주장이고 $P_i$는 분해된 하위 주장입니다. 각 $P_i$는 인간이 직접 이해하고 평가할 수 있는 수준으로 작게 유지됩니다.
+
+## Consultancy: 대안적 접근
+
+**Consultancy** 는 단일 AI 에이전트가 인간 판사에게 특정 결론의 타당성을 설득하는 구조입니다. Debate와의 핵심 차이:
+
+| 특성 | Debate | Consultancy |
+|------|--------|-------------|
+| **에이전트 수** | 2개 (대립) | 1개 |
+| **상호작용** | 에이전트 간 직접 반박 | 에이전트-판사 간 질의응답 |
+| **목표** | 상대방 논증 약화 | 판사를 특정 결론으로 설득 |
+| **조작 리스크** | 낮음 (상호 견제) | 높음 (단방향 설득) |
+
+이론적으로 Debate가 더 robust하지만, 실험적으로는 Consultancy도 유효한 경우가 많습니다.
+
+## Knowledge Divergence와 Debate 효과
+
+arXiv:2603.05293의 연구는 **지식 발산(Knowledge Divergence)** 이 Debate 효과에 미치는 영향을 분석합니다.
+
+### 지식 발산이란
+
+감독자와 피감독자 사이의 지식 격차를 정량화한 개념입니다:
+
+$$KD = D_{KL}(P_{supervisor} \| P_{agent})$$
+
+여기서 $P_{supervisor}$와 $P_{agent}$는 각각 감독자와 에이전트의 사전 분포입니다.
+
+### 핵심 발견
+
+지식 발산이 클수록 (감독자-에이전트 능력 차이가 클수록):
+- Debate의 효과가 **감소** 합니다. 판사가 두 에이전트의 논증을 비교할 능력 자체가 부족해집니다.
+- Hierarchical Verification의 상대적 가치가 **증가** 합니다. 작은 단계의 검증은 능력 차이가 작아도 가능합니다.
+
+이는 Scalable Oversight 기법의 적용 가능성이 감독자와 에이전트의 능력 차이에 따라 달라짐을 시사합니다.
+
+## EAS 지표와 스케일링 법칙
+
+### EAS (Estimated Argument Strength)
+
+arXiv:2504.18530에서 제안된 **EAS(Estimated Argument Strength)** 는 Debate에서 각 논증의 설득력을 수치화하는 지표입니다:
+
+$$EAS = \frac{P(\text{judge accepts} | \text{argument})}{P(\text{judge accepts})}$$
+
+EAS가 1보다 크면 해당 논증이 판사를 설득하는 데 기여하고, 1보다 작으면 역효과가 있음을 의미합니다.
+
+### Scalable Oversight의 스케일링 법칙
+
+모델 능력이 증가함에 따라 Scalable Oversight 기법의 효과도 어떻게 변하는가? 연구 결과:
+
+$$\text{Oversight Quality} \propto C_{supervisor}^\alpha \cdot C_{agent}^{-\beta}$$
+
+여기서 $C_{supervisor}$와 $C_{agent}$는 각각 감독자와 에이전트의 계산 자원이고, $\alpha > \beta > 0$입니다. 이는 감독자의 능력 향상이 에이전트의 능력 향상보다 Oversight 품질에 더 큰 영향을 미친다는 것을 의미합니다.
+
+## Scalable Oversight 벤치마크
+
+arXiv:2504.03731에서 제안된 벤치마크는 Scalable Oversight 기법을 체계적으로 평가하는 환경을 제공합니다.
+
+### 평가 태스크
+
+- **수학 증명 검증**: 형식적 증명의 각 단계를 검증
+- **코드 보안 분석**: 취약점 존재 여부와 위치 파악
+- **사실 검증**: 복잡한 과학적 주장의 정확성 평가
+- **윤리적 추론**: 도덕적으로 복잡한 시나리오의 판단
+
+### 측정 지표
+
+- **감독 정확도**: 에이전트의 출력이 올바른지 감독자가 정확히 판단하는 비율
+- **전문가 수준 격차**: 전문가 감독과 Scalable Oversight 기법 사이의 정확도 차이
+- **계산 효율성**: 동일한 감독 품질을 달성하는 데 필요한 계산량
+
+## Superalignment: 초지능 AI 정렬
+
+Scalable Oversight는 궁극적으로 **Superalignment** 문제와 연결됩니다. Superalignment는 인간보다 훨씬 뛰어난 초지능 AI를 어떻게 정렬하고 제어할 것인가의 문제입니다.
+
+### 핵심 도전
+
+1. **능력 역전**: AI가 인간보다 모든 면에서 뛰어나면, 인간이 AI의 출력물을 평가할 방법이 없습니다.
+2. **목표 해석**: 인간의 가치와 선호를 AI가 완전히 이해하고 내면화하는 것이 가능한가?
+3. **검증 불가능성**: AI의 내부 추론 과정이 너무 복잡하여 외부에서 검증할 수 없을 수 있습니다.
+
+### 유망한 접근법
+
+**약한 모델을 통한 강한 모델 훈련(Weak-to-Strong Generalization)**: OpenAI의 연구는 약한 감독자가 훈련한 강한 모델도 감독자를 초과하는 성능을 보일 수 있음을 보였습니다. 이는 완벽한 감독 없이도 정렬이 가능할 수 있다는 희망을 제공합니다.
+
+**AI를 활용한 AI 감독(AI-assisted Oversight)**: 신뢰할 수 있는 작은 AI 모델들이 협력하여 큰 AI 모델을 감독합니다. 각 작은 모델의 실수가 무작위적이라면, 집합적 판단은 신뢰할 수 있습니다.
+
+**형식적 검증(Formal Verification)**: 특정 도메인에서 AI의 출력물이 형식적으로 검증 가능한 형태여야 한다는 요구사항. 수학 증명의 Lean/Coq 형식화가 대표적 예시입니다.

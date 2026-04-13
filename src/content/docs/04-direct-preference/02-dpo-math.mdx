@@ -1,0 +1,116 @@
+---
+title: "DPO의 수학적 유도"
+description: "Bradley-Terry 모델과 KL-제약 보상 최대화 문제에서 DPO 손실 함수를 단계별로 유도합니다."
+sidebar:
+  order: 2
+learning_objectives:
+  - "Bradley-Terry 모델의 구조와 LLM 선호 학습에서의 역할을 이해한다"
+  - "KL-제약 보상 최대화 문제의 closed-form 해를 유도할 수 있다"
+  - "최적 정책에서 보상 함수를 역으로 표현하여 DPO 손실을 도출하는 과정을 따라갈 수 있다"
+estimated_minutes: 35
+references:
+  - title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model"
+    authors: "Rafailov, R., Sharma, A., Mitchell, E., Manning, C. D., Ermon, S., & Finn, C."
+    year: 2023
+    url: "https://arxiv.org/abs/2305.18290"
+  - title: "Bradley-Terry model for paired comparisons"
+    authors: "Bradley, R. A., & Terry, M. E."
+    year: 1952
+    url: "https://doi.org/10.2307/2334029"
+---
+
+## 1단계: Bradley-Terry 선호 모델
+
+DPO의 출발점은 **Bradley-Terry(BT) 모델** 입니다. BT 모델은 두 응답 $y_1$, $y_2$ 중 $y_1$이 선호될 확률을 각각의 보상 $r$로 표현합니다.
+
+$$
+p^*(y_1 \succ y_2 \mid x) = \frac{\exp(r^*(x, y_1))}{\exp(r^*(x, y_1)) + \exp(r^*(x, y_2))} = \sigma\bigl(r^*(x, y_1) - r^*(x, y_2)\bigr)
+$$
+
+여기서 $r^*(x, y)$는 진짜 인간 선호를 반영하는 잠재 보상 함수이고, $\sigma$는 시그모이드 함수다. RLHF에서는 이 $r^*$를 근사하는 보상 모델 $r_\phi$를 학습한 뒤, 이를 사용해 RL을 수행합니다.
+
+## 2단계: KL-제약 보상 최대화
+
+RLHF의 최종 목표 함수는 다음과 같습니다.
+
+$$
+\max_{\pi_\theta} \mathbb{E}_{x \sim \mathcal{D},\, y \sim \pi_\theta(y|x)}\bigl[r(x, y)\bigr] - \beta\, \mathbb{D}_{\mathrm{KL}}\bigl[\pi_\theta(y|x) \,\|\, \pi_{\text{ref}}(y|x)\bigr]
+$$
+
+KL 발산 항은 정책이 참조 모델에서 너무 멀리 벗어나지 않도록 제약하며, $\beta$는 이 제약의 강도를 조절합니다. 이 목적 함수를 다음과 같이 변형합니다.
+
+$$
+\max_{\pi_\theta} \mathbb{E}_{x,y}\left[r(x,y) - \beta \log \frac{\pi_\theta(y|x)}{\pi_{\text{ref}}(y|x)}\right]
+$$
+
+## 3단계: 최적 정책의 Closed-form 해
+
+위 최적화 문제는 해석적 해를 가집니다. 변분법(variational calculus)을 적용하면, 각 $(x, y)$ 쌍에 대해 독립적으로 최적화할 수 있으므로 최적 정책은 다음과 같습니다.
+
+$$
+\pi^*(y \mid x) = \frac{1}{Z(x)}\, \pi_{\text{ref}}(y \mid x)\, \exp\!\left(\frac{1}{\beta} r(x, y)\right)
+$$
+
+여기서 분배 함수 $Z(x)$는 정규화 상수다.
+
+$$
+Z(x) = \sum_y \pi_{\text{ref}}(y \mid x)\, \exp\!\left(\frac{1}{\beta} r(x, y)\right)
+$$
+
+이 식은 직관적으로, 최적 정책이 참조 정책에 보상을 지수 가중한 형태임을 보여줍니다.
+
+## 4단계: 보상 함수의 역표현
+
+3단계의 식에서 로그를 취해 $r(x, y)$를 역으로 표현합니다.
+
+$$
+\log \pi^*(y \mid x) = \log \pi_{\text{ref}}(y \mid x) + \frac{1}{\beta} r(x, y) - \log Z(x)
+$$
+
+이를 $r(x, y)$에 대해 정리하면,
+
+$$
+r(x, y) = \beta \log \frac{\pi^*(y \mid x)}{\pi_{\text{ref}}(y \mid x)} + \beta \log Z(x)
+$$
+
+이 식은 **보상 함수가 정책 비율의 로그로 표현될 수 있음** 을 보여줍니다. $\log Z(x)$는 $y$에 의존하지 않으므로, 두 응답의 보상 차이를 계산할 때 상쇄됩니다.
+
+## 5단계: BT 모델에 대입하여 DPO 손실 유도
+
+4단계의 보상 표현을 BT 모델 선호 확률에 대입합니다.
+
+$$
+p^*(y_w \succ y_l \mid x) = \sigma\bigl(r^*(x, y_w) - r^*(x, y_l)\bigr)
+$$
+
+$$
+= \sigma\!\left(\beta \log \frac{\pi^*(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \log \frac{\pi^*(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)}\right)
+$$
+
+$\log Z(x)$ 항은 차이 계산에서 정확히 소거됩니다. 이제 인간 선호 데이터셋 $\mathcal{D} = \{(x, y_w, y_l)\}$에 대한 최대 우도 추정(MLE)을 수행하면 **DPO 손실** 을 얻는다.
+
+$$
+L_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}}\!\left[\log \sigma\!\left(\beta \log \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \log \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)}\right)\right]
+$$
+
+## 유도의 핵심 통찰
+
+| 단계 | 핵심 아이디어 |
+|------|-------------|
+| BT 모델 | 선호 확률을 보상 차이의 시그모이드로 표현 |
+| KL-제약 목표 | 참조 정책에서 벗어나는 정도를 페널티화 |
+| Closed-form 해 | 최적 정책 = 참조 정책 × 지수 보상 가중치 |
+| 역표현 | 보상 = 정책 비율의 로그 + 정규화 상수 |
+| BT 대입 | $Z(x)$ 상쇄 → 보상 모델 없이 손실 표현 가능 |
+
+이 유도에서 결정적인 수학적 "마법"은 $Z(x)$가 소거된다는 점입니다. 정규화 상수는 비교할 두 응답에 동일하게 나타나므로, 선호 확률을 계산할 때 정확히 상쇄됩니다. 이로 인해 계산 불가능한 분배 함수 없이도 학습이 가능해진다.
+
+## 그래디언트 분석
+
+DPO 손실의 그래디언트는 다음과 같이 분해됩니다.
+
+$$
+\nabla_\theta L_{\text{DPO}} = -\beta\, \mathbb{E}\!\left[\sigma(\hat{r}_\theta(y_l, x) - \hat{r}_\theta(y_w, x))\bigl(\nabla_\theta \log \pi_\theta(y_w|x) - \nabla_\theta \log \pi_\theta(y_l|x)\bigr)\right]
+$$
+
+여기서 $\hat{r}_\theta(y, x) = \beta \log \frac{\pi_\theta(y|x)}{\pi_{\text{ref}}(y|x)}$는 암묵적 보상입니다. 그래디언트는 잘못 정렬된 쌍($y_l$이 $y_w$보다 높은 암묵적 보상을 가질 때)에 더 큰 가중치를 부여하는 자기 조정(self-adjusting) 구조를 가집니다.

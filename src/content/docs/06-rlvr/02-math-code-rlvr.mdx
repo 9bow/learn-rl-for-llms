@@ -1,0 +1,109 @@
+---
+title: "수학·코딩에서의 RLVR"
+description: "수학 문제와 코딩 태스크에서 검증 가능한 보상을 설계하고 적용하는 구체적인 방법과 벤치마크 성과를 학습합니다."
+sidebar:
+  order: 2
+learning_objectives:
+  - "수학 RLVR에서 정답 동치성 검증과 기호 수학 검증기의 역할을 이해한다"
+  - "코딩 RLVR에서 단위 테스트 기반 보상의 설계 원칙을 설명할 수 있다"
+  - "MATH, GSM8K, AIME, HumanEval 등 주요 벤치마크에서의 RLVR 성과를 파악한다"
+estimated_minutes: 25
+references:
+  - title: "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models"
+    authors: "Shao, Z., et al."
+    year: 2024
+    url: "https://arxiv.org/abs/2402.03300"
+  - title: "Training Language Models to Self-Correct via Reinforcement Learning"
+    authors: "Kumar, A., et al."
+    year: 2024
+    url: "https://arxiv.org/abs/2409.12917"
+  - title: "CodeRL: Mastering Code Generation through Pretrained Models and Deep Reinforcement Learning"
+    authors: "Le, H., et al."
+    year: 2022
+    url: "https://arxiv.org/abs/2207.01780"
+---
+
+## 수학 RLVR
+
+수학은 RLVR이 가장 자연스럽게 적용되는 도메인이다. 정답이 명확하고, 자동 검증이 가능하며, 대규모 문제-정답 데이터셋이 이미 존재하기 때문이다.
+
+### 정답 동치성 검증
+
+수학에서 "정답 비교"는 단순한 문자열 일치가 아니다. $\frac{1}{2}$과 $0.5$, $\frac{2}{4}$는 모두 동일한 값이지만 표현이 다르다. 따라서 **수학적 동치성(mathematical equivalence)** 검증이 필요하다.
+
+주요 검증 방법:
+
+- **수치 검증**: 두 표현을 수치적으로 계산하여 오차 범위 내에서 비교. $|f(x) - g(x)| < \epsilon$
+- **기호 검증**: SymPy 등 CAS(Computer Algebra System)로 $f(x) - g(x) = 0$ 여부를 기호적으로 확인
+- **정규화**: LaTeX 표현을 표준 형식으로 변환 후 비교
+
+DeepSeek-R1에서 사용한 검증기는 수치 검증과 기호 검증을 결합하여 False Positive와 False Negative를 최소화했다.
+
+### 수학 보상 설계
+
+$$
+r_{\text{math}}(x, y) = \begin{cases} 1 & \text{if } \text{verify}(\text{extract}(y), a^*) = \text{True} \\ 0 & \text{otherwise} \end{cases}
+$$
+
+여기서 $\text{extract}(y)$는 모델 응답 $y$에서 최종 답을 추출하는 함수다. 응답이 특정 형식(예: `\boxed{...}`)을 따르면 추출이 간단하지만, 자유 형식 응답에서는 정규식이나 별도 파서가 필요하다.
+
+### 수학 벤치마크 성과
+
+| 모델 | 방법 | GSM8K | MATH | AIME 2024 |
+|------|-----|-------|------|-----------|
+| GPT-4o | SFT+RLHF | 92.1% | 76.6% | 13.4% |
+| DeepSeekMath-7B | GRPO | 88.2% | 51.7% | — |
+| DeepSeek-R1-Zero | 순수 RL | 91.4% | 71.0% | 50.0% |
+| DeepSeek-R1 | RL+SFT | **97.3%** | **92.3%** | **79.8%** |
+| o1 | RL(비공개) | 98.0% | 96.4% | 83.3% |
+
+7B 모델인 DeepSeekMath가 GRPO로 MATH 51.7%를 달성한 것은 당시 오픈소스 최고 성능이었다.
+
+### 형식 증명 검증
+
+가장 엄격한 수학 RLVR은 **형식 증명(formal proof)** 검증이다.
+
+- **Lean 4**: Microsoft Research가 개발한 증명 보조기(proof assistant). 수학적 명제를 Lean 코드로 작성하면 커널이 증명의 타당성을 검증한다.
+- **Isabelle**: 또 다른 증명 보조기. 수학 올림피아드 문제 형식화에 활용된다.
+
+형식 증명 RLVR은 보상 해킹이 절대적으로 불가능하다. 증명 검증기를 통과하지 않으면 어떠한 보상도 없다.
+
+---
+
+## 코딩 RLVR
+
+코딩은 수학과 함께 RLVR의 핵심 적용 도메인이다. 컴파일러와 인터프리터가 자동 검증기 역할을 한다.
+
+### 단위 테스트 기반 보상
+
+코딩 RLVR의 표준 보상은 **단위 테스트 통과율** 이다.
+
+$$
+r_{\text{code}}(x, y) = \frac{\text{통과한 테스트 수}}{\text{전체 테스트 수}}
+$$
+
+이진 보상(모두 통과=1, 하나라도 실패=0) 또는 연속 보상(통과 비율) 모두 사용된다. 실제로는 연속 보상이 더 안정적인 학습 신호를 제공하는 경향이 있다.
+
+### 다층 보상 설계
+
+단순 테스트 통과율 외에 추가 보상 신호를 결합하면 더 나은 코드를 유도할 수 있다.
+
+| 보상 유형 | 측정 방법 | 가중치 |
+|---------|---------|------|
+| 기능 정확성 | 단위 테스트 통과율 | 높음 |
+| 컴파일 성공 | 구문 오류 없음 | 중간 |
+| 실행 효율성 | 시간/메모리 복잡도 | 낮음 |
+| 코드 스타일 | 린터 점수 | 낮음 |
+
+### 코딩 벤치마크
+
+- **HumanEval**: 164개 Python 함수 작성 문제. pass@k 지표 사용.
+- **MBPP**: 500개 기초 프로그래밍 문제.
+- **LiveCodeBench**: 경쟁 프로그래밍 플랫폼에서 실시간 업데이트되는 벤치마크. 데이터 오염 방지.
+- **SWE-bench**: 실제 GitHub 이슈 해결. 가장 현실적이고 어려운 코딩 벤치마크.
+
+CodeRL (Le et al., 2022)은 코딩 RLVR의 초기 연구로, 컴파일러 피드백을 RL 보상으로 사용하여 HumanEval pass@1을 크게 향상시켰다. 이후 DeepSeek-Coder, Qwen-Coder 등이 이 접근을 대규모로 발전시켰다.
+
+### 테스트 케이스 품질의 중요성
+
+코딩 RLVR에서 테스트 케이스의 품질이 성능을 결정한다. 테스트가 불완전하면 모델이 테스트를 통과하는 잘못된 코드를 학습할 수 있다. 엣지 케이스, 경계값, 예외 처리를 포함한 포괄적 테스트가 필수다. 일부 연구에서는 모델이 직접 테스트 케이스를 생성하는 자기 검증(self-verification) 방식도 탐구한다.
