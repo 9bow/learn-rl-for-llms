@@ -1,0 +1,145 @@
+---
+title: 기호 약속 (Notation)
+description: 본 시리즈 전체에서 일관되게 사용하는 수학 기호 · 표기 규칙을 한 곳에 모은 참조 문서입니다.
+sidebar:
+  order: 0
+  label: 00. 기호 약속
+pagefind: false
+learning_objectives:
+  - 시리즈 전체에서 사용하는 기호들의 정확한 의미를 한 곳에서 확인할 수 있다.
+  - 강화학습 · RLHF · DPO · GRPO · PPO 문헌의 표기 차이를 인지하고 본 시리즈의 선택을 이해할 수 있다.
+estimated_minutes: 8
+references:
+  - { title: "Sutton & Barto, Reinforcement Learning: An Introduction (2nd ed.)", url: "http://incompleteideas.net/book/the-book-2nd.html", authors: "Sutton, Barto", year: 2018, note: "표준 MDP/가치 함수/정책 기울기 표기법의 기준." }
+  - { title: "Spinning Up: Key Equations", url: "https://spinningup.openai.com/en/latest/spinningup/rl_intro2.html", authors: "OpenAI", note: "정책 기울기 · 어드밴티지 · PPO 표기 요약." }
+  - { title: "Wikipedia — Kullback–Leibler divergence (permalink)", url: "https://en.wikipedia.org/w/index.php?title=Kullback%E2%80%93Leibler_divergence&oldid=1219013322", note: "KL 정의 · 비대칭성 · 연속·이산 사례." }
+---
+
+import ConceptCard from '../../../components/learning/ConceptCard';
+
+본 페이지는 **시리즈 전체**에서 일관되게 쓰는 기호를 한 곳에 모은 용어집입니다. 각 장에서 처음 등장하는 기호는 이 페이지의 해당 섹션으로 링크됩니다.
+
+문헌마다 기호가 미세하게 다를 수 있으므로 "본 시리즈의 선택"을 앵커(anchor)로 못 박아 두고, 원 논문/교과서가 다르게 쓰는 경우에만 각 장에서 별도 표시합니다.
+
+---
+
+<a id="states-and-actions"></a>
+## 상태와 행동
+
+- $s_t \in \mathcal{S}$: 시각 $t$에서의 **상태(state)**. LLM 맥락에서는 지금까지 생성된 토큰 시퀀스(prefix) 또는 대화 컨텍스트를 뜻합니다.
+- $a_t \in \mathcal{A}$: 시각 $t$에서의 **행동(action)**. LLM 맥락에서는 다음 토큰(혹은 다음 토큰 분포에서 샘플된 하나)입니다.
+- $\tau = (s_0, a_0, s_1, a_1, \ldots)$: **궤적(trajectory)**.
+- $\rho_0$ / $\rho$: 초기 상태 분포 / 상태 방문 분포(state visitation distribution). 정책 $\pi$에 의존할 때는 $\rho^\pi$로 씁니다.
+
+> **문헌 차이.** Sutton & Barto 2판은 $R_{t+1}$ (한 스텝 뒤 보상)을 선호하고, Spinning Up 등은 $r_t$를 씁니다. **본 시리즈는 $r_t$** 를 표준으로 합니다.
+
+<a id="policies"></a>
+## 정책
+
+- $\pi(a \mid s)$: **정책(policy)**. 상태 $s$에서 행동 $a$를 선택할 조건부 확률 분포.
+- $\pi_\theta$: 파라미터 $\theta$로 매개화된 **학습 대상 정책**. LLM에서는 토크나이저 위의 자기회귀(autoregressive) 분포입니다.
+- $\pi_{ref}$: **참조 정책(reference policy)**. RLHF · DPO에서 KL 페널티의 기준이 되는 고정 정책(보통 SFT 모델).
+- $\pi_{old}$ / $\pi_{\theta_{old}}$: PPO · GRPO의 **이전 업데이트 시점 정책**(중요도 비율 계산 기준).
+- $\theta$: 정책의 매개변수 벡터. 업데이트 대상.
+
+<a id="rewards-and-returns"></a>
+## 보상과 수익
+
+- $r_t$: 시각 $t$의 **즉시 보상(reward)**.
+- $R(\tau)$: 궤적 $\tau$의 **총 보상**.
+- $G_t = \sum_{k=0}^{\infty} \gamma^k r_{t+k}$: 시각 $t$부터의 **할인 수익(discounted return)**.
+- $\gamma \in [0, 1]$: **할인 계수(discount factor)**. $\gamma=0$이면 근시안, $\gamma \to 1$이면 장기 시야.
+
+<a id="value-functions"></a>
+## 가치 함수
+
+- $V^\pi(s) = \mathbb{E}_\pi[G_t \mid s_t = s]$: **상태 가치 함수(state value)**.
+- $Q^\pi(s, a) = \mathbb{E}_\pi[G_t \mid s_t = s, a_t = a]$: **행동 가치 함수(Q-function)**.
+- $A^\pi(s, a) = Q^\pi(s, a) - V^\pi(s)$: **어드밴티지(advantage)**. 상태 평균 대비 특정 행동의 상대적 이득.
+- $A_t$: 궤적 표본에서 추정된 어드밴티지(예: GAE, 몬테카를로, TD residual).
+- $\hat{A}_i$ (GRPO): 그룹 $G$ 내 $i$번째 응답에 대한 **정규화된 그룹 어드밴티지** — $\hat{A}_i = (R_i - \mathrm{mean}_G(R))/\mathrm{std}_G(R)$.
+
+<a id="policy-gradient"></a>
+## 정책 기울기
+
+- $\nabla_\theta \log \pi_\theta(a \mid s)$: **스코어(score) 함수**. 로그 가능도의 기울기이며, 정책 기울기 정리의 핵심.
+- $J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]$: **정책 성과 지표(expected return)**.
+- $\nabla_\theta J(\theta) = \mathbb{E}_\pi[\nabla_\theta \log \pi_\theta(a_t \mid s_t) \cdot A^\pi(s_t, a_t)]$: **정책 기울기 정리(policy gradient theorem)** — 어드밴티지 버전.
+
+<a id="ppo"></a>
+## PPO 관련
+
+- $r_t(\theta) = \dfrac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{old}}(a_t \mid s_t)}$: **확률 비율(probability ratio)**. 현재 정책이 이전 대비 얼마나 바뀌었는지.
+- $\epsilon$: **클립 폭(clip ratio)**. 보통 $0.1\sim0.2$.
+- $L^{\mathrm{CLIP}}(\theta) = \mathbb{E}_t\!\left[\min\!\bigl(r_t(\theta) A_t,\ \mathrm{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon)\cdot A_t\bigr)\right]$: **PPO-Clip 목적 함수**.
+
+<ConceptCard title="왜 $r_t(\theta)$와 $r_t$(보상)의 기호가 겹치나?">
+둘 다 $r_t$로 쓰지만, 전자는 두 정책의 **비율**(괄호 $\theta$ 존재)이고 후자는 **보상 스칼라**입니다. 본문에서 헷갈릴 수 있는 맥락에서는 비율을 $\mathrm{ratio}_t(\theta)$ 또는 $\rho_t$로 병기합니다.
+</ConceptCard>
+
+<a id="dpo"></a>
+## DPO · 직접 선호 최적화
+
+- $y_w$: **선호된 응답(winning completion)**.
+- $y_l$: **덜 선호된 응답(losing completion)**.
+- $\sigma(x) = \dfrac{1}{1 + e^{-x}}$: **시그모이드(logistic / sigmoid function)**. Bradley-Terry 모델의 link function으로도 쓰입니다.
+- $\beta$: **KL 제약 강도(regularization strength)**. DPO · RLHF 모두 참조 정책과의 분리 허용폭을 조절.
+- DPO loss: $-\log \sigma\!\bigl(\beta \cdot (\log \pi_\theta(y_w \mid x)/\pi_{ref}(y_w \mid x) - \log \pi_\theta(y_l \mid x)/\pi_{ref}(y_l \mid x))\bigr)$.
+
+<a id="grpo"></a>
+## GRPO · 그룹 정책 최적화
+
+- $G$: **그룹 크기(group size)** — 한 프롬프트당 샘플링하는 응답 개수.
+- $\hat{A}_i$: 그룹 내 정규화된 어드밴티지(위 참조).
+- $\rho_i(\theta) = \dfrac{\pi_\theta(y_i \mid x)}{\pi_{\theta_{old}}(y_i \mid x)}$: 응답 $y_i$에 대한 확률 비율.
+
+<a id="divergences"></a>
+## 정보량과 발산
+
+- $D_{KL}(p \parallel q) = \displaystyle\sum_x p(x) \log \dfrac{p(x)}{q(x)}$: **Kullback-Leibler 발산**. **비대칭**임에 유의.
+- $\mathcal{H}(p) = -\sum_x p(x) \log p(x)$: **엔트로피**.
+- $\mathcal{H}(p, q) = -\sum_x p(x) \log q(x)$: **교차 엔트로피(cross-entropy)**.
+
+> **비대칭성.** $D_{KL}(p \parallel q) \neq D_{KL}(q \parallel p)$. RLHF의 전진 KL(forward) $D_{KL}(\pi_\theta \parallel \pi_{ref})$는 "$\pi_\theta$가 커버하는 곳마다 $\pi_{ref}$가 작지 않아야 한다" (mode-covering)는 압력을, 역방향(reverse) $D_{KL}(\pi_{ref} \parallel \pi_\theta)$는 mode-seeking 압력을 줍니다.
+
+<a id="partition-and-normalization"></a>
+## 분배 함수와 정규화
+
+- $Z(x)$: **분배 함수(partition function)**. $Z(x) = \sum_y \pi_{ref}(y \mid x) \exp(r(x, y)/\beta)$. DPO 유도에서 "암묵적 보상 모델" 해석 시 사라지는 상수로 핵심 역할을 합니다.
+- 소프트맥스: $\pi(a \mid s) = \exp(f(s, a))/\sum_{a'} \exp(f(s, a'))$.
+
+<a id="expectations"></a>
+## 기대값 기호
+
+- $\mathbb{E}_{x \sim p}[\cdot]$: $x$가 분포 $p$에서 추출될 때의 기대값.
+- $\mathbb{E}_\pi[\cdot]$: 정책 $\pi$를 따를 때의 기대값(궤적 분포에 대한 약식 기호).
+- $\mathbb{E}_t[\cdot]$: 시간 단계 $t$에 대한 경험적 평균(미니배치 평균).
+
+<a id="katex-macros"></a>
+## KaTeX 매크로 허용 목록
+
+본 시리즈는 KaTeX 기본 매크로만 사용합니다. 커스텀 매크로는 아래만 허용합니다(추가 시 이 목록을 업데이트하고 PR에서 논의).
+
+- $\mathbb{E}$, $\mathbb{R}$, $\mathbb{N}$, $\mathcal{S}$, $\mathcal{A}$, $\mathcal{H}$, $\mathcal{L}$: 블랙보드/캘리그래픽 심볼.
+- $\mathrm{clip}$, $\mathrm{mean}$, $\mathrm{std}$, $\mathrm{ratio}$: 수식 내 식별자(normal 서체).
+- $\hat{\cdot}$, $\bar{\cdot}$, $\tilde{\cdot}$: 추정값 · 평균 · 보조 심볼.
+
+<a id="conventions"></a>
+## 표기 관례 요약
+
+1. **한글 우선, 영문 병기**: `정책 경사(policy gradient)` 같은 패턴으로 첫 등장 시 병기.
+2. **인덱스**: 시간은 하첨자 $t$, 그룹 인덱스는 하첨자 $i$, 파라미터는 하첨자 $\theta$.
+3. **분포 대 값**: 분포는 $\pi$, $\rho$, $p$, $q$. 스칼라 값은 $r$, $R$, $V$, $Q$, $A$, $G$.
+4. **논문 차이 명시**: 특정 장에서 원 논문 기호가 다를 경우 첫 사용 시 각주로 표시.
+
+---
+
+<a id="cross-links"></a>
+## 장별 연결
+
+각 장의 해당 수식 설명 안에서 첫 사용 시 아래 앵커로 연결됩니다.
+
+- [상태/행동](#states-and-actions) · [정책](#policies) · [보상/수익](#rewards-and-returns)
+- [가치 함수](#value-functions) · [정책 기울기](#policy-gradient)
+- [PPO 관련](#ppo) · [DPO](#dpo) · [GRPO](#grpo)
+- [KL/발산](#divergences) · [분배 함수](#partition-and-normalization)

@@ -9,18 +9,12 @@ learning_objectives:
   - "보상 모델 Over-optimization 현상과 그 원인을 설명할 수 있다"
 estimated_minutes: 35
 references:
-  - title: "Training language models to follow instructions with human feedback"
-    authors: "Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al."
-    year: 2022
-    url: "https://arxiv.org/abs/2203.02155"
-  - title: "Reward Model Ensembles Help Mitigate Overoptimization"
-    authors: "Coste, T., Anwar, U., Kirk, R., & Krueger, D."
-    year: 2023
-    url: "https://arxiv.org/abs/2310.02743"
-  - title: "Scaling Laws for Reward Model Overoptimization"
-    authors: "Gao, L., Biderman, S., et al."
-    year: 2022
-    url: "https://arxiv.org/abs/2210.10760"
+  - { title: "Training language models to follow instructions with human feedback", authors: "Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al.", year: 2022, url: "https://arxiv.org/abs/2203.02155", note: "InstructGPT. 쌍별 비교에서 k-way 랭킹까지 확장한 Bradley-Terry 손실의 대규모 실무 사례, 6B RM으로 175B 정책을 지도하는 구성." }
+  - { title: "Reward Model Ensembles Help Mitigate Overoptimization", authors: "Coste, T., Anwar, U., Kirk, R., & Krueger, D.", year: 2023, url: "https://arxiv.org/abs/2310.02743", note: "여러 RM의 최솟값 등 비관적 집계가 over-optimization을 줄이는 실증 근거. 앙상블 전략의 이론·실험 정리." }
+  - { title: "Scaling Laws for Reward Model Overoptimization", authors: "Gao, L., Biderman, S., et al.", year: 2022, url: "https://arxiv.org/abs/2210.10760", note: "proxy reward는 √KL로 늘고 gold reward는 일정 KL 이후 꺾여 내려가는 관측. 본 장 over-optimization 절의 정량식 출처." }
+  - { title: "Deep Reinforcement Learning from Human Preferences", authors: "Christiano, P. F., Leike, J., Brown, T. B., Martic, M., Legg, S., & Amodei, D.", year: 2017, url: "https://arxiv.org/abs/1706.03741", note: "쌍대 선호로 신경망 보상 모델을 학습하는 파이프라인을 제시한 초기 작업. Bradley-Terry 기반 손실의 RL 접목 근거." }
+  - { title: "Learning to summarize from human feedback", authors: "Stiennon, N., Ouyang, L., Wu, J., Ziegler, D. M., Lowe, R., Voss, C., Radford, A., Amodei, D., & Christiano, P.", year: 2020, url: "https://arxiv.org/abs/2009.01325", note: "요약 과제에서 BT 손실 기반 RM + PPO가 SFT를 넘어서는 것을 체계적으로 보여 RLHF 파이프라인 표준화." }
+  - { title: "Rank Analysis of Incomplete Block Designs: I. The Method of Paired Comparisons", authors: "Bradley, R. A., & Terry, M. E.", year: 1952, url: "https://doi.org/10.2307/2334029", note: "쌍대 비교에서 선호 확률을 두 항목의 잠재 강도 차이의 로지스틱으로 모델링한 원전. 본 장 BT 모델의 기초." }
 ---
 
 import Mermaid from '../../../components/learning/Mermaid.tsx';
@@ -33,23 +27,31 @@ RLHF에서 보상 모델(Reward Model, RM)은 인간 선호의 **대리자(proxy
 
 $$r_\phi: \mathcal{X} \times \mathcal{Y} \rightarrow \mathbb{R}$$
 
+> **직관.** 보상 모델은 (프롬프트, 응답) 쌍을 **하나의 실수**로 사영하는 함수다. 출력이 스칼라여야 하는 이유는 이후 PPO가 이를 RL 환경의 보상 신호처럼 취급하기 때문이며, 그 수치의 상대 크기만이 학습에 영향을 준다. 즉 절대 값 자체보다 응답 간 **점수 차이**가 학습 신호의 의미를 결정한다.
+
 **핵심 직관**: 보상 모델은 "이 응답이 인간에게 얼마나 만족스러울까?"를 수치화하는 역할을 합니다. 이 수치가 PPO 학습의 유일한 학습 신호이므로, 보상 모델의 정확도가 전체 RLHF 파이프라인의 품질 상한을 결정합니다.
 
 ## Bradley-Terry 모델
 
-선호 데이터에서 보상 모델을 학습하는 가장 널리 사용되는 이론적 틀은 **Bradley-Terry 모델(1952)** 입니다. 이 모델은 두 선택지 $y_1, y_2$ 중 $y_1$이 선호될 확률을 다음과 같이 정의합니다:
+선호 데이터에서 보상 모델을 학습하는 가장 널리 사용되는 이론적 틀은 **Bradley-Terry 모델(1952)** 입니다. 이 모델은 두 선택지 $y_1, y_2$ 중 $y_1$이 선호될 확률을 다음과 같이 정의합니다. 여기서 [\\(\sigma\\)](../../01-rl-fundamentals/00-notation/#dpo)는 시그모이드 함수입니다:
 
 $$P(y_1 \succ y_2 \mid x) = \sigma(r(x, y_1) - r(x, y_2)) = \frac{e^{r(x, y_1)}}{e^{r(x, y_1)} + e^{r(x, y_2)}}$$
 
+> **직관.** 선호 확률을 두 응답 보상 **차이**의 시그모이드로 모델링한다. 차이가 0이면 50:50이 되고, 차이가 커지면 결정적으로 한쪽으로 쏠리는 의미다. 즉 절대 점수가 아니라 두 응답의 상대적 격차만이 선호를 결정하므로, 보상 함수에 임의 상수를 더해도 결과가 바뀌지 않는다는 점이 핵심 역할을 한다.
+
 여기서 $\sigma$는 시그모이드 함수, $r(x, y)$는 응답 $y$의 절대적 품질 점수입니다. 이 모델은 선호가 두 응답의 품질 차이에 의해서만 결정된다고 가정합니다.
 
-**학습 목적함수 유도**: 관측된 선호 데이터 $\mathcal{D} = \{(x, y_w, y_l)\}$의 로그 가능도를 최대화하면,
+**학습 목적함수 유도**: 관측된 [선호 데이터셋](../../01-rl-fundamentals/00-notation/#dpo) $\mathcal{D} = \{(x, y_w, y_l)\}$의 로그 가능도를 최대화하면,
 
 $$\log P(\mathcal{D}) = \sum_{(x, y_w, y_l) \in \mathcal{D}} \log P(y_w \succ y_l \mid x) = \sum \log \sigma\bigl(r_\phi(x, y_w) - r_\phi(x, y_l)\bigr)$$
+
+{/* skip-intuition: direct application of BT probability to dataset — BT 식을 관측 쌍들에 곱해 로그를 취한 대수적 전개일 뿐, 바로 아래 RM 손실에서 의미를 해석한다 */}
 
 이를 최소화 문제로 바꾸면 **보상 모델 학습 손실**을 얻습니다:
 
 $$\mathcal{L}_{RM}(\phi) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \log \sigma\left(r_\phi(x, y_w) - r_\phi(x, y_l)\right) \right]$$
+
+> **직관.** $y_w$가 $y_l$보다 높은 점수를 받을 때 손실이 줄어드는 이진 분류 손실이다. 잘못 분류한(선호 응답의 점수가 더 낮은) 쌍일수록 시그모이드가 작아져 **큰 기울기**가 흐르고, 이미 잘 분리된 쌍에는 기울기가 거의 흐르지 않는다. 즉 학습은 보상 격차를 벌리는 방향으로 **자기 조정**되는 역할을 한다.
 
 여기서 $y_w$는 선호(preferred/winner) 응답, $y_l$은 비선호(less preferred/loser) 응답입니다. 이 손실함수는 보상 모델이 선호 응답에 더 높은 점수를 부여하도록 학습합니다.
 
@@ -106,6 +108,8 @@ InstructGPT는 쌍별 비교와 순위 매기기를 조합하여 사용했습니
 
 $$r_\phi(x, y) = \mathbf{W} \cdot h_{[EOS]} + b$$
 
+> **직관.** 전체 시퀀스를 트랜스포머가 읽고 마지막 EOS 위치의 은닉 벡터 하나에 "문장 전체의 품질"이 응축됐다고 가정한 뒤, 선형 헤드로 스칼라 점수를 뽑는다. 평균 풀링이 아니라 EOS를 쓰는 이유는 어텐션이 그 지점에 전체 맥락을 모아오기 때문이며, 이 선택이 길이 편향과 헤드 설계 논의의 출발점 역할을 한다.
+
 여기서 $h_{[EOS]}$는 EOS 토큰 위치의 마지막 레이어 은닉 상태, $\mathbf{W} \in \mathbb{R}^{1 \times d}$는 스칼라 출력을 위한 선형 변환입니다. 전체 시퀀스 $(x, y)$를 인코딩한 후 하나의 스칼라로 집약합니다.
 
 **초기화**: 일반적으로 SFT 모델 가중치로 초기화합니다. 이는 (a) 학습 효율을 높이고, (b) 사전학습 언어 이해 능력을 보상 판단에 활용할 수 있게 합니다. 무작위 초기화 대비 수렴 속도가 빠르고 최종 성능이 높습니다.
@@ -139,6 +143,8 @@ Gao et al. (2022)의 **스케일링 법칙** 연구는 다음을 발견했습니
 - 이 역전 지점은 일반적으로 KL $\approx$ 10~20 nats 부근에서 발생합니다
 
 $$r_{\text{gold}}(D_{KL}) \approx r_{\text{gold,0}} + a\sqrt{D_{KL}} - b \cdot D_{KL}$$
+
+> **직관.** 초반에는 $\sqrt{D_{KL}}$ 항이 지배해 골드 보상이 오르지만, [KL](../../01-rl-fundamentals/00-notation/#divergences)이 커지면 선형 항이 **이겨서 꺾여 내려간다**. 즉 모델이 참조 정책에서 멀리 갈수록 보상 모델의 신뢰 영역을 벗어나 실제 선호와 괴리되는 의미로, 최적 KL 지점은 두 항의 저울이 뒤집히는 곳에서 결정된다.
 
 여기서 $a, b > 0$는 데이터·모델 의존 상수입니다. $D_{KL}$이 충분히 커지면 이차항이 지배하여 실제 보상이 감소합니다.
 

@@ -9,53 +9,60 @@ learning_objectives:
   - "최적 정책에서 보상 함수를 역으로 표현하여 DPO 손실을 도출하는 과정을 따라갈 수 있다"
 estimated_minutes: 35
 references:
-  - title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model"
-    authors: "Rafailov, R., Sharma, A., Mitchell, E., Manning, C. D., Ermon, S., & Finn, C."
-    year: 2023
-    url: "https://arxiv.org/abs/2305.18290"
-  - title: "Bradley-Terry model for paired comparisons"
-    authors: "Bradley, R. A., & Terry, M. E."
-    year: 1952
-    url: "https://doi.org/10.2307/2334029"
+  - { title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model", authors: "Rafailov, R., Sharma, A., Mitchell, E., Manning, C. D., Ermon, S., & Finn, C.", year: 2023, url: "https://arxiv.org/abs/2305.18290", note: "DPO 원 논문. Bradley-Terry + KL-제약 RL 목적식으로부터 분배 함수가 소거되는 폐형 유도를 제시." }
+  - { title: "Bradley-Terry model for paired comparisons", authors: "Bradley, R. A., & Terry, M. E.", year: 1952, url: "https://doi.org/10.2307/2334029", note: "쌍대 비교에서 선호 확률을 두 항목의 잠재 강도 차이의 로지스틱으로 모델링한 고전 논문." }
+  - { title: "Fine-Tuning Language Models from Human Preferences", authors: "Ziegler, D. M., Stiennon, N., Wu, J., Brown, T. B., Radford, A., Amodei, D., Christiano, P., & Irving, G.", year: 2019, url: "https://arxiv.org/abs/1909.08593", note: "RLHF에서 KL-제약 보상 최대화 목적식을 LLM 미세조정에 처음 체계적으로 적용한 문헌. DPO 유도의 출발 목적식이 여기서 온다." }
+  - { title: "Deep Reinforcement Learning from Human Preferences", authors: "Christiano, P. F., Leike, J., Brown, T. B., Martic, M., Legg, S., & Amodei, D.", year: 2017, url: "https://arxiv.org/abs/1706.03741", note: "Bradley-Terry 기반 선호 모델을 딥러닝 보상 모델 학습에 접목한 초기 작업. DPO의 선호 확률 가정의 실증적 근거." }
+  - { title: "From r to Q*: Your Language Model is Secretly a Q-Function", authors: "Rafailov, R., Hejna, J., Park, R., & Finn, C.", year: 2024, url: "https://arxiv.org/abs/2404.12358", note: "DPO의 암묵적 보상 해석을 토큰 수준 Q-함수로 확장. 최적 정책의 지수 가중 형태와 DPO 손실의 관계를 재검토." }
 ---
 
 ## 1단계: Bradley-Terry 선호 모델
 
-DPO의 출발점은 **Bradley-Terry(BT) 모델** 입니다. BT 모델은 두 응답 $y_1$, $y_2$ 중 $y_1$이 선호될 확률을 각각의 보상 $r$로 표현합니다.
+DPO의 출발점은 **Bradley-Terry(BT) 모델** 입니다. BT 모델은 두 응답 [\\(y_w, y_l\\)](../../01-rl-fundamentals/00-notation/#dpo) 중 하나가 선호될 확률을 각각의 보상 $r$로 표현합니다. 아래에서는 일반화를 위해 먼저 $y_1, y_2$로 적은 뒤, 선호/비선호 쌍 $(y_w, y_l)$로 좁혀 갑니다.
 
 $$
 p^*(y_1 \succ y_2 \mid x) = \frac{\exp(r^*(x, y_1))}{\exp(r^*(x, y_1)) + \exp(r^*(x, y_2))} = \sigma\bigl(r^*(x, y_1) - r^*(x, y_2)\bigr)
 $$
 
-여기서 $r^*(x, y)$는 진짜 인간 선호를 반영하는 잠재 보상 함수이고, $\sigma$는 시그모이드 함수다. RLHF에서는 이 $r^*$를 근사하는 보상 모델 $r_\phi$를 학습한 뒤, 이를 사용해 RL을 수행합니다.
+> **직관.** 두 응답의 선호 확률을 보상 차이의 시그모이드로 모델링한다. 보상 차가 커질수록 선호는 결정적으로 한쪽으로 쏠리고, 차이가 0이면 50:50이 된다. 즉 절대 보상이 아니라 **보상 차이**만이 선호를 결정한다는 의미다.
+
+여기서 $r^*(x, y)$는 진짜 인간 선호를 반영하는 잠재 보상 함수이고, [\\(\sigma\\)](../../01-rl-fundamentals/00-notation/#dpo)는 시그모이드 함수다. RLHF에서는 이 $r^*$를 근사하는 보상 모델 $r_\phi$를 학습한 뒤, 이를 사용해 RL을 수행합니다.
 
 ## 2단계: KL-제약 보상 최대화
 
 RLHF의 최종 목표 함수는 다음과 같습니다.
 
 $$
-\max_{\pi_\theta} \mathbb{E}_{x \sim \mathcal{D},\, y \sim \pi_\theta(y|x)}\bigl[r(x, y)\bigr] - \beta\, \mathbb{D}_{\mathrm{KL}}\bigl[\pi_\theta(y|x) \,\|\, \pi_{\text{ref}}(y|x)\bigr]
+\max_{\pi_\theta} \mathbb{E}_{x \sim \mathcal{D},\, y \sim \pi_\theta(y|x)}\bigl[r(x, y)\bigr] - \beta\, D_{KL}\bigl[\pi_\theta(y|x) \,\|\, \pi_{ref}(y|x)\bigr]
 $$
 
-KL 발산 항은 정책이 참조 모델에서 너무 멀리 벗어나지 않도록 제약하며, $\beta$는 이 제약의 강도를 조절합니다. 이 목적 함수를 다음과 같이 변형합니다.
+> **직관.** 보상을 높이되 [참조 정책 π\_ref](../../01-rl-fundamentals/00-notation/#policies)에서 벗어날수록 벌점이 커진다. [\\(\beta\\)](../../01-rl-fundamentals/00-notation/#dpo)가 크면 참조 정책에 가깝게 보수적으로, 작으면 보상을 공격적으로 추구한다. 즉 β는 "얼마나 과감하게 바뀌어도 되는지"를 결정하는 손잡이 역할을 한다.
+
+KL 발산 항은 정책이 참조 모델에서 너무 멀리 벗어나지 않도록 제약하며, $\beta$는 이 제약의 강도를 조절합니다. KL 정의 $D_{KL}[\pi_\theta \| \pi_{ref}] = \mathbb{E}_{y\sim\pi_\theta}[\log \pi_\theta(y|x) - \log \pi_{ref}(y|x)]$를 대입해 기대값 안쪽으로 합쳐 쓰면 다음 형태가 됩니다.
 
 $$
-\max_{\pi_\theta} \mathbb{E}_{x,y}\left[r(x,y) - \beta \log \frac{\pi_\theta(y|x)}{\pi_{\text{ref}}(y|x)}\right]
+\max_{\pi_\theta} \mathbb{E}_{x,y}\left[r(x,y) - \beta \log \frac{\pi_\theta(y|x)}{\pi_{ref}(y|x)}\right]
 $$
+
+{/* skip-intuition: algebraic rearrangement — KL 정의를 기대값 안으로 합친 대수적 재배열일 뿐, 위 블록과 동일한 목표를 기술함 */}
 
 ## 3단계: 최적 정책의 Closed-form 해
 
 위 최적화 문제는 해석적 해를 가집니다. 변분법(variational calculus)을 적용하면, 각 $(x, y)$ 쌍에 대해 독립적으로 최적화할 수 있으므로 최적 정책은 다음과 같습니다.
 
 $$
-\pi^*(y \mid x) = \frac{1}{Z(x)}\, \pi_{\text{ref}}(y \mid x)\, \exp\!\left(\frac{1}{\beta} r(x, y)\right)
+\pi^*(y \mid x) = \frac{1}{Z(x)}\, \pi_{ref}(y \mid x)\, \exp\!\left(\frac{1}{\beta} r(x, y)\right)
 $$
 
-여기서 분배 함수 $Z(x)$는 정규화 상수다.
+> **직관.** 최적 정책은 참조 정책에 보상을 지수 가중한 형태다. 보상이 높을수록 해당 응답의 확률이 **지수적**으로 커지고, β가 작을수록 그 집중도가 극단적으로 증폭된다. 다시 말해 β는 "보상 한 단위가 확률에 얼마나 강하게 반영되는지"를 결정한다.
+
+여기서 분배 함수 [\\(Z(x)\\)](../../01-rl-fundamentals/00-notation/#partition-and-normalization)는 정규화 상수다.
 
 $$
-Z(x) = \sum_y \pi_{\text{ref}}(y \mid x)\, \exp\!\left(\frac{1}{\beta} r(x, y)\right)
+Z(x) = \sum_y \pi_{ref}(y \mid x)\, \exp\!\left(\frac{1}{\beta} r(x, y)\right)
 $$
+
+{/* skip-intuition: normalization constant definition — 위 해의 확률 합을 1로 만들기 위한 정규화 상수를 적은 정의식 */}
 
 이 식은 직관적으로, 최적 정책이 참조 정책에 보상을 지수 가중한 형태임을 보여줍니다.
 
@@ -64,14 +71,18 @@ $$
 3단계의 식에서 로그를 취해 $r(x, y)$를 역으로 표현합니다.
 
 $$
-\log \pi^*(y \mid x) = \log \pi_{\text{ref}}(y \mid x) + \frac{1}{\beta} r(x, y) - \log Z(x)
+\log \pi^*(y \mid x) = \log \pi_{ref}(y \mid x) + \frac{1}{\beta} r(x, y) - \log Z(x)
 $$
+
+{/* skip-intuition: log of previous closed-form — 3단계 해의 양변에 로그를 취한 대수적 변형 단계 */}
 
 이를 $r(x, y)$에 대해 정리하면,
 
 $$
-r(x, y) = \beta \log \frac{\pi^*(y \mid x)}{\pi_{\text{ref}}(y \mid x)} + \beta \log Z(x)
+r(x, y) = \beta \log \frac{\pi^*(y \mid x)}{\pi_{ref}(y \mid x)} + \beta \log Z(x)
 $$
+
+> **직관.** 보상을 정책 비율의 로그로 다시 쓴다. 이로써 보상 모델 없이 **정책만으로** 선호를 표현할 수 있게 되고, $\log Z(x)$는 응답 $y$에 의존하지 않는 상수라는 점이 다음 단계에서 결정적 역할을 한다.
 
 이 식은 **보상 함수가 정책 비율의 로그로 표현될 수 있음** 을 보여줍니다. $\log Z(x)$는 $y$에 의존하지 않으므로, 두 응답의 보상 차이를 계산할 때 상쇄됩니다.
 
@@ -83,15 +94,21 @@ $$
 p^*(y_w \succ y_l \mid x) = \sigma\bigl(r^*(x, y_w) - r^*(x, y_l)\bigr)
 $$
 
+{/* skip-intuition: restatement of BT with preferred/dispreferred pair — 1단계 BT 식을 (y_w, y_l) 쌍으로 다시 적은 것 */}
+
 $$
-= \sigma\!\left(\beta \log \frac{\pi^*(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \log \frac{\pi^*(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)}\right)
+= \sigma\!\left(\beta \log \frac{\pi^*(y_w \mid x)}{\pi_{ref}(y_w \mid x)} - \beta \log \frac{\pi^*(y_l \mid x)}{\pi_{ref}(y_l \mid x)}\right)
 $$
+
+{/* skip-intuition: substitution of reverse reward expression — 4단계 역표현을 위 BT 식에 대입한 대수적 치환 단계 */}
 
 $\log Z(x)$ 항은 차이 계산에서 정확히 소거됩니다. 이제 인간 선호 데이터셋 $\mathcal{D} = \{(x, y_w, y_l)\}$에 대한 최대 우도 추정(MLE)을 수행하면 **DPO 손실** 을 얻는다.
 
 $$
-L_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}}\!\left[\log \sigma\!\left(\beta \log \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \log \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)}\right)\right]
+L_{\text{DPO}}(\pi_\theta; \pi_{ref}) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}}\!\left[\log \sigma\!\left(\beta \log \frac{\pi_\theta(y_w \mid x)}{\pi_{ref}(y_w \mid x)} - \beta \log \frac{\pi_\theta(y_l \mid x)}{\pi_{ref}(y_l \mid x)}\right)\right]
 $$
+
+> **직관.** 분배 함수 $Z(x)$가 두 응답에 동일하게 나타나 차이에서 **상쇄**된다. 이것이 DPO가 보상 모델 없이 학습 가능한 핵심이다. 결과적으로 손실은 "$y_w$의 로그비는 키우고 $y_l$의 로그비는 줄인다"는 단순한 분류 손실로 환원되며, 계산 불가능한 $Z(x)$는 더 이상 등장하지 않는다.
 
 ## 유도의 핵심 통찰
 
@@ -113,4 +130,6 @@ $$
 \nabla_\theta L_{\text{DPO}} = -\beta\, \mathbb{E}\!\left[\sigma(\hat{r}_\theta(y_l, x) - \hat{r}_\theta(y_w, x))\bigl(\nabla_\theta \log \pi_\theta(y_w|x) - \nabla_\theta \log \pi_\theta(y_l|x)\bigr)\right]
 $$
 
-여기서 $\hat{r}_\theta(y, x) = \beta \log \frac{\pi_\theta(y|x)}{\pi_{\text{ref}}(y|x)}$는 암묵적 보상입니다. 그래디언트는 잘못 정렬된 쌍($y_l$이 $y_w$보다 높은 암묵적 보상을 가질 때)에 더 큰 가중치를 부여하는 자기 조정(self-adjusting) 구조를 가집니다.
+> **직관.** 잘못 정렬된 쌍일수록 앞의 시그모이드 가중치가 커진다. 즉 모델이 헷갈리는(또는 선호를 거꾸로 배치한) 쌍에 큰 기울기가 쏠리고, 이미 잘 정렬된 쌍에는 기울기가 거의 흐르지 않는 **자기 조정(self-adjusting)** 구조를 결정한다. 학습이 정체된 구간을 스스로 찾아가는 의미를 가진다.
+
+여기서 $\hat{r}_\theta(y, x) = \beta \log \frac{\pi_\theta(y|x)}{\pi_{ref}(y|x)}$는 암묵적 보상입니다. 그래디언트는 잘못 정렬된 쌍($y_l$이 $y_w$보다 높은 암묵적 보상을 가질 때)에 더 큰 가중치를 부여하는 자기 조정(self-adjusting) 구조를 가집니다.
