@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 320" role="img" aria-labelledby="t d">
+  <title id="t">PPO clip function</title>
+  <desc id="d">Piecewise-linear clip between 1-epsilon and 1+epsilon.</desc>
+  <g stroke="currentColor" fill="none" stroke-width="2">
+    <line x1="40" y1="280" x2="480" y2="280"/>
+    <line x1="40" y1="40" x2="40" y2="280"/>
+    <polyline points="80,280 220,160 300,160 440,40"/>
+  </g>
+</svg>

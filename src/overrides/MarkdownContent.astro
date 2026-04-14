@@ -1,0 +1,10 @@
+---
+import Default from '@astrojs/starlight/components/MarkdownContent.astro';
+import References from '../components/learning/References.tsx';
+
+const entry = Astro.locals.starlightRoute?.entry;
+const refs = entry?.data?.references;
+const enabled = import.meta.env.ENABLE_AUTO_REFS === '1';
+---
+<Default><slot /></Default>
+{enabled && Array.isArray(refs) && refs.length > 0 && <References items={refs} />}

@@ -1,0 +1,13 @@
+---
+title: Intuition pass fixture
+---
+
+정책 $\pi_\theta(a \mid s)$는 상태 $s$에서 행동 $a$를 고르는 조건부 분포다.
+
+$$
+V^\pi(s) = \mathbb{E}_\pi\left[\sum_{t=0}^{\infty} \gamma^t r_t \mid s_0 = s\right]
+$$
+
+> **직관.** 이 값은 "상태 $s$에서 시작해 정책을 끝까지 따를 때 기대되는 총 보상"을 의미한다. 할인 계수 $\gamma$가 커지면 먼 미래의 보상도 비중 있게 반영되고, 줄어들면 근시안적으로 현재에 집중한다.
+
+다음 단원으로.
