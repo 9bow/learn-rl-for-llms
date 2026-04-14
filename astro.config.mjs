@@ -34,6 +34,9 @@ export default defineConfig({
         { label: '11. 안전성과 미래', autogenerate: { directory: '11-safety-future' } },
       ],
       customCss: ['./src/styles/custom.css'],
+      components: {
+        MarkdownContent: './src/overrides/MarkdownContent.astro',
+      },
     }),
     react(),
   ],
