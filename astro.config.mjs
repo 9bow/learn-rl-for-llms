@@ -15,6 +15,16 @@ export default defineConfig({
   },
   integrations: [
     starlight({
+      head: [
+        {
+          tag: 'script',
+          attrs: { async: true, src: 'https://www.googletagmanager.com/gtag/js?id=G-9NH1EKP8KQ' },
+        },
+        {
+          tag: 'script',
+          content: `window.dataLayer = window.dataLayer || [];\nfunction gtag(){dataLayer.push(arguments);}\ngtag('js', new Date());\ngtag('config', 'G-9NH1EKP8KQ');`,
+        },
+      ],
       title: 'RL for LLMs',
       defaultLocale: 'root',
       locales: {
