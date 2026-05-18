@@ -10,7 +10,7 @@ learning_objectives:
 estimated_minutes: 25
 references:
   - { title: "DAPO: An Open-Source LLM Reinforcement Learning System at Scale", authors: "Yu, Q., et al. (ByteDance Seed)", year: 2025, url: "https://arxiv.org/abs/2503.14476", note: "DAPO 원 논문. 비대칭 Clip-Higher, 동적 샘플링, 토큰 수준 손실, KL 페널티 제거의 네 가지 개선을 GRPO 위에 결합." }
-  - { title: "Dr. GRPO: Removing Bias in GRPO's Group Normalization", authors: "Liu, Z., et al.", year: 2025, url: "https://arxiv.org/abs/2503.20783", note: "GRPO의 그룹 표준편차가 편향 추정량임을 지적하고 불편 분산 보정 및 KL 항 제거의 이론적 근거를 제시." }
+  - { title: "Understanding R1-Zero-Like Training: A Critical Perspective", authors: "Liu, Z., et al.", year: 2025, url: "https://arxiv.org/abs/2503.20783", note: "Dr. GRPO를 제안한 논문. GRPO가 특히 오답 응답의 길이를 인위적으로 늘리는 optimization bias를 만들 수 있음을 지적하고 편향을 줄이는 목적식을 제시." }
   - { title: "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models", authors: "Shao, Z., et al.", year: 2024, url: "https://arxiv.org/abs/2402.03300", note: "GRPO 원 논문. DAPO와 Dr. GRPO가 공통적으로 개선하려는 기저 목적식과 그룹 정규화 advantage의 출처." }
   - { title: "Proximal Policy Optimization Algorithms", authors: "Schulman, J., Wolski, F., Dhariwal, P., Radford, A., & Klimov, O.", year: 2017, url: "https://arxiv.org/abs/1707.06347", note: "Clip-Higher가 변형하는 PPO 대칭 클리핑의 출발점. DAPO가 ε을 상/하로 분리하는 이유를 이해하려면 이 대리 목적식이 기준." }
   - { title: "Spinning Up: Proximal Policy Optimization", authors: "OpenAI", url: "https://spinningup.openai.com/en/latest/algorithms/ppo.html", note: "PPO-Clip과 advantage 정규화의 교과서적 정리. 토큰 수준 손실 집계와 시퀀스 수준 집계의 차이를 대조하는 기준점." }
@@ -149,7 +149,7 @@ AIME 2024에서 **50점** 달성을 기준으로, 표준 GRPO 대비 약 50% 적
 
 ## Dr. GRPO: 이론적 Bias 제거
 
-**Dr. GRPO** (Liu et al., 2025, arXiv:2503.20783)는 GRPO의 이론적 문제를 정밀하게 분석하고 두 가지 체계적 bias를 식별합니다.
+**Dr. GRPO** 는 Liu et al. (2025)의 *Understanding R1-Zero-Like Training: A Critical Perspective*에서 제안된 GRPO 수정입니다. 이 논문은 R1-Zero류 훈련을 재검토하면서, GRPO가 특히 오답 응답의 길이를 인위적으로 늘리는 optimization bias를 만들 수 있음을 지적합니다.
 
 ### 분석 1: KL 항의 이론적 불필요성
 
@@ -177,7 +177,7 @@ $$
 
 **편향된 추정량(biased estimator)**: 샘플 표준편차 $\hat{\sigma}$는 모집단 표준편차 $\sigma$의 편향된 추정값입니다. 특히 $G$가 작을 때(4~8) 편향이 심각합니다.
 
-**길이-보상 공변량(length-reward covariance)**: 응답 길이 $|y_i|$와 보상 $r_i$ 사이에 체계적 상관관계가 있을 때, 정규화가 이를 보정하지 않아 길이에 따른 보상 편향이 남습니다.
+**길이 편향(length bias)**: 응답 길이 $|y_i|$와 보상 $r_i$ 사이에 체계적 상관관계가 있거나 오답 샘플이 길어지는 학습 압력을 받을 때, 정규화가 이를 보정하지 못해 토큰 효율성이 악화될 수 있습니다.
 
 Dr. GRPO의 편향 수정 추정량:
 

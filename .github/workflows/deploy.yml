@@ -27,6 +27,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm approve-builds esbuild sharp
       - run: pnpm build
       - uses: actions/upload-pages-artifact@v3
         with:

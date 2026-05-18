@@ -43,6 +43,9 @@ export default defineConfig({
         { label: '10. RL 인프라', autogenerate: { directory: '10-infrastructure' } },
         { label: '11. 안전성과 미래', autogenerate: { directory: '11-safety-future' } },
       ],
+      social: [
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/9bow/learn-rl-for-llms' },
+      ],
       customCss: ['./src/styles/custom.css'],
       components: {
         MarkdownContent: './src/overrides/MarkdownContent.astro',
