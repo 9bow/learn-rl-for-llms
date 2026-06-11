@@ -67,8 +67,16 @@ function scanFile(relPath) {
 }
 
 function loadTier(tier) {
-  return readFileSync(resolve(REPO_ROOT, `.omc/manifests/tier-${tier}-paths.txt`), 'utf8')
-    .split('\n').filter(Boolean);
+  const candidates = [
+    resolve(REPO_ROOT, `.omc/manifests/tier-${tier}-paths.txt`),
+    resolve(REPO_ROOT, `scripts/manifests/tier-${tier}-paths.txt`),
+  ];
+  const manifest = candidates.find((p) => existsSync(p));
+  if (!manifest) {
+    console.error(`tier manifest missing: tier-${tier}-paths.txt`);
+    process.exit(2);
+  }
+  return readFileSync(manifest, 'utf8').split('\n').filter(Boolean);
 }
 
 function runSelfTest() {

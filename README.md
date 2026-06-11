@@ -11,8 +11,8 @@ LLM 분야에서 쓰이는 강화학습 기법을 기초부터 RLHF, DPO, GRPO, 
 ## 구성
 
 - 11개 섹션
-- 61개 MDX 챕터
-- 11개 섹션별 퀴즈
+- 60개 학습 챕터 + 홈 문서 1개
+- 11개 섹션별 퀴즈 JSON 데이터
 - 문서 품질 점검 스크립트 포함
 - Astro 6 + Starlight + React 기반
 - 수식 렌더링을 위한 KaTeX 설정 포함
@@ -40,12 +40,26 @@ pnpm build
 pnpm preview
 ```
 
-## 문서 검증
+## 검증
+
+변경 후에는 다음 명령으로 Starlight 콘텐츠, MDX, React 컴포넌트, KaTeX 수식 렌더링, 정적 자산 경로를 확인합니다.
+
+```bash
+pnpm build
+```
+
+문서 품질 점검 스크립트는 `scripts/manifests/tier-a-paths.txt`에 등록된 Tier A 문서의 참고문헌, 표기, 직관 설명과 SVG 예산을 추가로 확인합니다.
 
 ```bash
 pnpm check:docs
 pnpm verify:scripts
 ```
+
+## 콘텐츠 품질 기준
+
+- RLHF, DPO, GRPO, RLVR 등 방법론은 목적 함수, 보상 신호, 데이터 요구사항을 구분해 설명합니다.
+- 최신 연구 동향은 과장된 성능 주장보다 재현 조건, 평가 한계, 안전성 쟁점을 함께 다룹니다.
+- 수식은 직관 설명과 연결하고, 표기법은 `00-notation.mdx`와 일관되게 유지합니다.
 
 ## 주요 경로
 

@@ -1,0 +1,12 @@
+src/content/docs/01-rl-fundamentals/00-notation.mdx
+src/content/docs/01-rl-fundamentals/02-policy-value.mdx
+src/content/docs/01-rl-fundamentals/03-policy-gradient.mdx
+src/content/docs/01-rl-fundamentals/04-actor-critic-ppo.mdx
+src/content/docs/02-rl-meets-llm/03-kl-penalty.mdx
+src/content/docs/03-rlhf/02-reward-model.mdx
+src/content/docs/03-rlhf/03-ppo-finetuning.mdx
+src/content/docs/04-direct-preference/02-dpo-math.mdx
+src/content/docs/04-direct-preference/03-ipo-kto-orpo.mdx
+src/content/docs/04-direct-preference/04-simpo.mdx
+src/content/docs/05-reasoning-rl/02-grpo.mdx
+src/content/docs/05-reasoning-rl/03-dapo-drgrpo.mdx
