@@ -13,8 +13,8 @@ references:
     url: "https://arxiv.org/abs/2505.17147"
   - title: "Safety Instincts: Towards Intrinsic Safety for LLMs"
     url: "https://arxiv.org/abs/2510.01088"
-  - title: "Efficient Safety Alignment via Direct Preference Optimization"
-    url: "https://aclanthology.org/2025.acl-long.1"
+  - title: "Efficient Safety Alignment of Large Language Models via Preference Re-ranking and Representation-based Reward Modeling"
+    url: "https://aclanthology.org/2025.acl-long.1504/"
 ---
 
 import Mermaid from '../../../components/learning/Mermaid.tsx';
@@ -105,19 +105,17 @@ Safety Instincts는 이 내재적 신호를 활용하여 **자기 방어(self-de
 
 ## 효율적 안전 정렬: DPO 기반 접근
 
-ACL 2025에 발표된 연구는 PPO 기반 RLHF보다 훨씬 효율적인 **DPO(Direct Preference Optimization) 기반 안전 정렬** 을 제안합니다.
+ACL 2025에 발표된 연구는 오프라인 선호 학습에서 생기는 분포 이동을 줄이기 위해 **선호 재순위화와 표현 기반 보상 모델링** 을 결합합니다. 기존 참고 링크는 다른 ACL 논문을 가리키고 있었으므로, 이 절에서는 실제 논문의 기여 범위에 맞춰 설명합니다.
 
-### 안전 특화 DPO
+### 안전 선호 최적화
 
-표준 DPO를 안전 정렬에 적용할 때의 핵심 수정:
+안전 정렬용 선호 데이터는 동일한 유해 요청에 대한 안전한 거부와 위험한 수용을 비교합니다. 다만 해당 논문의 핵심은 단순히 표준 DPO를 적용하는 데 있지 않고, 현재 정책의 응답을 재순위화해 오프라인 데이터와의 분포 차이를 줄이고 표현 기반 보상 모델로 선호 신호를 보강하는 데 있습니다.
 
 **선호 쌍 구성**: 동일한 해로운 요청에 대해 안전한 거부와 위험한 수용을 각각 선택된(chosen)과 거부된(rejected) 응답으로 구성합니다.
 
 $$\mathcal{L}_{safe-DPO} = -\mathbb{E}\left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_{safe}|x)}{\pi_{ref}(y_{safe}|x)} - \beta \log \frac{\pi_\theta(y_{unsafe}|x)}{\pi_{ref}(y_{unsafe}|x)} \right) \right]$$
 
-**공격 다양성**: 다양한 공격 유형(직접 요청, 사고 유도, 역할극, 코드 우회 등)을 포괄하는 데이터셋 구성
-
-PPO 기반 대비 **계산 비용을 10배 이상 절감** 하면서 유사한 안전성 향상을 달성합니다.
+실험 결과는 여러 안전 벤치마크에서 기존 오프라인 선호 최적화보다 나은 안전성-유용성 균형을 보고하지만, 효과의 크기는 모델·데이터·평가 설정에 따라 달라집니다.
 
 ## Alignment Tax 문제
 
@@ -135,7 +133,7 @@ Alignment Tax의 주요 원인:
 
 | 전략 | 방법 | 효과 |
 |------|------|------|
-| **데이터 혼합** | 안전 데이터와 일반 능력 데이터를 혼합 | Alignment Tax 50% 감소 |
+| **데이터 혼합** | 안전 데이터와 일반 능력 데이터를 혼합 | 일반 능력 망각 완화 |
 | **LoRA 정렬** | 전체 파라미터가 아닌 LoRA 어댑터만 정렬 | 기존 능력 보존 |
 | **다목적 보상** | 안전성과 유용성을 동시에 최적화하는 보상 함수 설계 | 균형 유지 |
 | **Constitutional AI** | 안전 원칙을 명시적으로 정의하여 과도한 거부 방지 | 정밀한 거부 |
@@ -147,4 +145,4 @@ Alignment Tax를 정량적으로 측정하기 위한 지표:
 
 $$\text{AlignmentTax} = \frac{\text{Score}_{base} - \text{Score}_{aligned}}{\text{Score}_{base}} \times 100\%$$
 
-이상적으로 이 값은 0에 가까워야 합니다. 현재 최선의 방법들은 안전성 향상은 유지하면서 AlignmentTax를 5% 미만으로 유지합니다.
+이상적으로 이 값은 0에 가까워야 합니다. 다만 단일 임계값을 모든 모델과 벤치마크에 적용할 수 없으므로, 안전성 지표와 일반 능력 지표를 같은 평가 조건에서 함께 보고해야 합니다.
