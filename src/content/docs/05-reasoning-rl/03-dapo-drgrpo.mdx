@@ -1,12 +1,13 @@
 ---
-title: "DAPO와 Dr. GRPO"
-description: "ByteDance의 DAPO와 Dr. GRPO가 GRPO의 한계를 극복하고 추론 성능을 향상시키는 방법을 학습합니다."
+title: "DAPO, Dr. GRPO, REINFORCE++, GSPO"
+description: "GRPO 이후의 안정화·critic 제거·시퀀스 수준 정책 최적화 설계를 비교합니다."
 sidebar:
   order: 3
 learning_objectives:
   - "DAPO의 Decoupled Clip과 Dynamic Sampling이 학습 효율을 높이는 원리를 이해한다"
   - "토큰 수준 정책 그래디언트 손실의 의미와 시퀀스 수준 대비 장점을 설명할 수 있다"
-  - "Dr. GRPO가 GRPO의 KL 항과 bias 문제를 어떻게 식별하고 수정하는지 이해한다"
+  - "Dr. GRPO와 REINFORCE++가 critic·정규화·길이 편향을 다루는 관점을 비교한다"
+  - "GSPO가 시퀀스 수준 확률 비율을 사용하는 이유를 설명할 수 있다"
 estimated_minutes: 25
 references:
   - { title: "DAPO: An Open-Source LLM Reinforcement Learning System at Scale", authors: "Yu, Q., et al. (ByteDance Seed)", year: 2025, url: "https://arxiv.org/abs/2503.14476", note: "DAPO 원 논문. 비대칭 Clip-Higher, 동적 샘플링, 토큰 수준 손실, KL 페널티 제거의 네 가지 개선을 GRPO 위에 결합." }
@@ -14,6 +15,8 @@ references:
   - { title: "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models", authors: "Shao, Z., et al.", year: 2024, url: "https://arxiv.org/abs/2402.03300", note: "GRPO 원 논문. DAPO와 Dr. GRPO가 공통적으로 개선하려는 기저 목적식과 그룹 정규화 advantage의 출처." }
   - { title: "Proximal Policy Optimization Algorithms", authors: "Schulman, J., Wolski, F., Dhariwal, P., Radford, A., & Klimov, O.", year: 2017, url: "https://arxiv.org/abs/1707.06347", note: "Clip-Higher가 변형하는 PPO 대칭 클리핑의 출발점. DAPO가 ε을 상/하로 분리하는 이유를 이해하려면 이 대리 목적식이 기준." }
   - { title: "Spinning Up: Proximal Policy Optimization", authors: "OpenAI", url: "https://spinningup.openai.com/en/latest/algorithms/ppo.html", note: "PPO-Clip과 advantage 정규화의 교과서적 정리. 토큰 수준 손실 집계와 시퀀스 수준 집계의 차이를 대조하는 기준점." }
+  - { title: "REINFORCE++: A Simple and Efficient Approach for Aligning Large Language Models", authors: "Hu, J.", year: 2025, url: "https://arxiv.org/abs/2501.03262", note: "critic 없이 PPO 계열 안정화 요소를 결합하는 방법을 제시한다." }
+  - { title: "Group Sequence Policy Optimization", authors: "Zheng, C., et al.", year: 2025, url: "https://arxiv.org/abs/2507.18071", note: "시퀀스 가능도에 기반한 importance ratio와 클리핑을 제안한다." }
 ---
 
 ## GRPO의 실용적 한계
@@ -136,14 +139,9 @@ def dapo_update(policy, prompts, G, eps_high=0.28, eps_low=0.20):
     loss.backward()
 ```
 
-### DAPO 실험 결과
+### 결과를 읽는 방법
 
-AIME 2024에서 **50점** 달성을 기준으로, 표준 GRPO 대비 약 50% 적은 학습 스텝으로 동일 성능에 도달했습니다. 특히 엔트로피 붕괴 억제 효과로 학습 후반부에서도 다양한 추론 전략을 유지했습니다.
-
-| 방법 | AIME 2024 | 학습 스텝 | 엔트로피 유지 |
-|-----|---------|---------|-----------|
-| 표준 GRPO | ~33점 | 기준 | 낮음 |
-| DAPO (4가지 기법) | ~50점 | 기준 ×0.5 | 높음 |
+DAPO 논문은 공개된 학습 시스템과 데이터 설정에서 동적 샘플링, 비대칭 클리핑, 토큰 수준 손실, KL 항 제거를 함께 평가합니다. 따라서 한 가지 기법의 효과나 다른 모델·데이터셋으로의 성능 이전을 표 하나의 수치로 일반화하면 안 됩니다. 재현 시에는 그룹 크기, 보상 함수, 길이 제한, 롤아웃 엔진, 평가 하니스까지 같은 조건으로 기록합니다.
 
 ---
 
@@ -201,14 +199,22 @@ $$
 | 이론적 근거 | 경험적 | 경험적 | 이론적 |
 | 주요 기여 | 기초 알고리즘 | 실용적 개선 | 이론적 정당화 |
 
-### 실제 적용 권장 사항
+## REINFORCE++와 GSPO
 
-DAPO와 Dr. GRPO는 상호 보완적입니다. 실무에서 가장 효과적인 조합은 다음과 같습니다.
+**REINFORCE++**는 별도 critic을 두지 않고 REINFORCE에 PPO 계열의 안정화 요소를 결합하는 방법입니다. critic 메모리를 줄일 수 있지만, 어떤 보상·배치·길이 설정에서도 GRPO보다 낫다고 가정할 수는 없습니다. 알고리즘을 고를 때는 critic 비용, 보상 분산, 재현 가능한 구현 여부를 함께 비교합니다.
 
-1. DAPO의 **Dynamic Sampling** — 배치 정보 밀도 최대화
-2. DAPO의 **Clip-Higher** — 엔트로피 유지 및 탐색 장려
-3. DAPO의 **Token-level Loss** — 길이 편향 제거
-4. Dr. GRPO의 **편향 수정 추정량** — 이론적으로 올바른 advantage 계산
-5. 공통으로 **KL 항 제거** — 불필요한 제약 및 계산 비용 제거
+**GSPO(Group Sequence Policy Optimization)** 는 토큰별 확률 비율 대신 응답 전체의 가능도에서 비율을 만들고 시퀀스 수준으로 클리핑·보상·최적화를 수행합니다. 원 논문은 특히 MoE RL 학습의 안정성을 동기로 제시합니다.
 
-이 조합은 순수 GRPO 대비 수렴 속도와 최종 성능 모두에서 개선을 보입니다.
+```text
+토큰 수준 비율: ρ₁, ρ₂, …, ρ_T  → 토큰마다 갱신 크기 판단
+시퀀스 수준 비율: ρ(y | x)       → 응답 전체를 하나의 행동으로 판단
+```
+
+이는 “언제나 시퀀스 수준이 낫다”는 규칙이 아니라, 토큰 수준 중요도 비율이 긴 응답·MoE 라우팅에서 만들 수 있는 불안정성을 다른 방식으로 다루는 설계 선택이다. 같은 프롬프트, 보상, 토큰 예산에서 GRPO·DAPO·REINFORCE++·GSPO를 비교해야 한다.
+
+### 실제 적용 원칙
+
+1. 알고리즘보다 먼저 검증기와 평가 하니스를 고정한다.
+2. 정책·참조 모델·롤아웃 정책의 버전을 함께 기록한다.
+3. 길이, 보상 분산, 유효 그룹 비율을 성능과 함께 보고한다.
+4. KL 항·클리핑·정규화는 독립된 설계 선택이므로 결합 효과를 따로 검증한다.

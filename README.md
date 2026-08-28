@@ -19,17 +19,17 @@ LLM 분야에서 쓰이는 강화학습 기법을 기초부터 RLHF, DPO, GRPO, 
 
 ## 커리큘럼
 
-1. 강화학습 기초: MDP, 정책, 가치 함수, policy gradient, PPO, 보상 설계
-2. LLM과 RL의 만남: LLM을 RL 에이전트로 보는 관점, KL penalty, 온라인/오프라인 RL
-3. RLHF: 보상 모델, PPO fine-tuning, 한계, Constitutional AI, InstructGPT 사례
-4. 직접 선호 최적화: DPO, IPO, KTO, ORPO, SimPO, RainbowPO
-5. Reasoning과 RL: GRPO, DAPO, PRM, STaR, Quiet-STaR, 탐색과 test-time scaling
-6. RLVR: 검증 가능한 보상, 수학/코드 RLVR, DeepSeek-R1, rule-based reward, scaling
-7. 코드 생성과 RL: 코드 RL 기본, StepCoder, process reward, AceMath, 오픈소스 추론 모델
-8. Vision 모델과 RL: 멀티모달 RLHF, RLSD, diffusion RL, reward model 설계
-9. 에이전트 RL: 웹 에이전트, tool calling, multi-turn, multi-agent RL
-10. RL 인프라: TRL, OpenRLHF, veRL, 분산 학습, 실험 관리
-11. 안전성과 미래: 안전 정렬, scalable oversight, 보상 해킹, 열린 문제
+1. 강화학습 기초: MDP, 정책, 가치 함수, 정책 경사, PPO, 보상 설계
+2. LLM 후학습과 RL의 역할: SFT·선호 최적화·온라인 RL, 토큰 수준 MDP, KL 제약과 재현성
+3. RLHF와 AI 피드백: 보상 모델, PPO 기반 RLHF, Constitutional AI, RLAIF와 한계
+4. 직접 선호 최적화: DPO 수학, IPO·KTO·ORPO·SimPO, 강건·순위·온라인 선호 최적화
+5. 추론 모델과 정책 최적화: GRPO, DAPO, Dr. GRPO, REINFORCE++, GSPO, PRM·ORM, 탐색
+6. RLVR: 검증기 설계, 수학·코드 RLVR, DeepSeek-R1, 규칙 보상, 스케일링과 커리큘럼
+7. 소프트웨어 공학과 코드 RL: 실행 환경, 테스트·검증기, 과정 보상, SWE-bench 기반 평가
+8. 멀티모달 모델과 RL: VLM RLHF·RLVR, 시각 추론, 컴퓨터 사용, 확산 모델 RL
+9. 에이전트 RL: 환경 설계, 웹·도구·멀티턴 상호작용, 비동기 학습과 멀티에이전트
+10. RL 학습 인프라와 운영: TRL, OpenRLHF, verl, 분산·비동기 롤아웃, 실험 재현성
+11. 안전성·평가·열린 문제: 안전 정렬, 명세 게임, scalable oversight, 레드팀과 평가
 
 ## 로컬 개발
 
