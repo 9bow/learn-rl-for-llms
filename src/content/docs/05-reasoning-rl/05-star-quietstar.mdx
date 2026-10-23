@@ -77,17 +77,17 @@ $$
 P(x_{t+1} \mid x_{1:t}) = \alpha \cdot P_{\text{with thought}}(x_{t+1} \mid x_{1:t}, r_t) + (1-\alpha) \cdot P_{\text{base}}(x_{t+1} \mid x_{1:t})
 $$
 
-$\alpha$는 사고의 기여도를 조절하는 학습된 스칼라다. 초기에는 기저 모델에 의존하다가, 사고 품질이 향상될수록 사고의 비중이 증가한다.
+$\alpha$는 각 문맥의 은닉 상태를 읽는 mixing head가 출력하는 가중치다. 위 식은 혼합의 개념 표현이다. 초기에는 기저 모델에 의존하다가, 사고 품질이 향상될수록 사고의 비중이 증가한다.
 
 ### 학습: REINFORCE
 
-Quiet-STaR는 REINFORCE로 학습된다. 보상은 **사고 유/무에 따른 다음 토큰 예측 확률의 차이** 다.
+Quiet-STaR는 REINFORCE로 학습된다. 보상은 특정 rationale을 쓴 후속 실제 토큰의 로그 가능도와, 같은 위치의 여러 rationale에 걸친 기준 예측 로그 가능도의 차이다.
 
 $$
-R_t = \log P_{\text{with thought}}(x_{t+1}) - \log P_{\text{without thought}}(x_{t+1})
+R_j=\log p_j^{\text{talk}}(x_{j+1:j+n})-\log\bar p_j^{\text{talk}}(x_{j+1:j+n})
 $$
 
-사고가 예측을 개선하면 양의 보상, 악화시키면 음의 보상이다.
+여기서 $n$은 함께 평가하는 후속 실제 토큰 수다. 원 논문은 여러 rationale을 생성해 분산을 줄이며, 음의 보상을 제외하는 선택의 편향 가능성도 설명한다.
 
 ### Quiet-STaR의 성과
 
@@ -100,6 +100,6 @@ Mistral-7B 기반 실험에서:
 
 GSM8K에서 약 2배, CommonsenseQA에서 약 30% 향상이다. 특히 이 개선은 태스크별 fine-tuning 없이 일반 텍스트 학습만으로 달성되었다는 점에서 의미있다.
 
-### Fast Quiet-STaR (EMNLP 2025)
+### 계산 비용과 선택적 추론
 
-Quiet-STaR의 주요 한계는 추론 지연이다. 모든 토큰에서 사고를 생성하므로 추론 속도가 크게 느려진다. **Fast Quiet-STaR** 는 사고가 실제로 유익한 토큰 위치를 선택적으로 식별하여 필요한 곳에만 사고를 생성함으로써 이 문제를 해결했다.
+원 논문은 매 위치의 rationale 생성 비용을 한계로 설명하고, 필요한 위치에서만 사고하는 방식을 향후 방향으로 제시한다. 이를 근거가 없는 후속 논문의 확정 성과로 소개하지 않는다. 보고한 평가 수치와 추론 계산량을 함께 읽는다.

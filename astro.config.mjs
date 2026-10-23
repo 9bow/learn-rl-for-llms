@@ -10,6 +10,7 @@ export default defineConfig({
   site: 'https://9bow.github.io',
   base: '/learn-rl-for-llms',
   markdown: {
+    gfm: true,
     remarkPlugins: [remarkMath],
     rehypePlugins: [rehypeKatex],
   },

@@ -11,8 +11,8 @@ estimated_minutes: 30
 references:
   - { title: "Training language models to follow instructions with human feedback", authors: "Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al.", year: 2022, url: "https://arxiv.org/abs/2203.02155", note: "InstructGPT. RLHF 파이프라인에서 KL 페널티 계수 β의 실무 튜닝과 레퍼런스 모델 설계의 표준 사례를 제시." }
   - { title: "Fine-Tuning Language Models from Human Preferences", authors: "Ziegler, D. M., Stiennon, N., Wu, J., Brown, T. B., Radford, A., et al.", year: 2019, url: "https://arxiv.org/abs/1909.08593", note: "LLM RLHF 초창기 논문. KL 제약 보상 최대화 목적식을 LLM 미세조정에 처음 체계적으로 적용." }
-  - { title: "Measuring Goodhart's Law (Scaling Laws for Reward Model Overoptimization)", authors: "Gao, L., Biderman, S., Elazar, Y., Blakey, D., et al.", year: 2022, url: "https://arxiv.org/abs/2210.10760", note: "KL 발산과 대리 보상·골드 보상의 관계를 정량화한 실증 연구. KL ≈ 10~20 nats 근처에서 over-optimization이 관측됨을 보고." }
-  - { title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model", authors: "Rafailov, R., Sharma, A., Mitchell, E., Manning, C. D., Ermon, S., & Finn, C.", year: 2023, url: "https://arxiv.org/abs/2305.18290", note: "KL 제약 보상 최대화 문제의 폐형 해를 이용해 보상 모델 없이 정책만으로 학습하는 DPO 유도. 본 문서 마지막 절의 이론적 배경." }
+  - { title: "Scaling Laws for Reward Model Overoptimization", authors: "Gao, L., Schulman, J., & Hilton, J.", year: 2022, url: "https://arxiv.org/abs/2210.10760", note: "통제된 gold/proxy 보상 모델 실험에서 최적화 강도와 보상 과최적화의 관계를 분석." }
+  - { title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model", authors: "Rafailov, R., Sharma, A., Mitchell, E., Ermon, S., Manning, C. D., & Finn, C.", year: 2023, url: "https://arxiv.org/abs/2305.18290", note: "KL 제약 보상 최대화 문제의 폐형 해를 이용해 보상 모델 없이 정책만으로 학습하는 DPO 유도. 본 문서 마지막 절의 이론적 배경." }
   - { title: "Kullback–Leibler divergence", authors: "Wikipedia contributors", year: 2024, url: "https://en.wikipedia.org/w/index.php?title=Kullback%E2%80%93Leibler_divergence&oldid=1219013322", note: "KL 발산의 정의·비음수성·비대칭성·mode-covering/seeking 해석에 대한 표준 레퍼런스." }
   - { title: "Reinforcement Learning: An Introduction (2nd ed.)", authors: "Sutton, R. S., & Barto, A. G.", year: 2018, url: "http://incompleteideas.net/book/the-book-2nd.html", note: "KL 페널티가 가산 보상(soft reward)에 녹아들어 제약된 최적 정책을 유도하는 정보이론적 배경의 고전 교과서." }
 ---
@@ -55,7 +55,7 @@ $$r(x, y) = r_\phi(x, y) - \beta \cdot D_{KL}\left(\pi_\theta(\cdot \mid x) \| \
 
 $$r_t = \begin{cases} r_\phi(x, y) - \beta \log \frac{\pi_\theta(y_t \mid x, y_{<t})}{\pi_{ref}(y_t \mid x, y_{<t})} & t = T \\ -\beta \log \frac{\pi_\theta(y_t \mid x, y_{<t})}{\pi_{ref}(y_t \mid x, y_{<t})} & t < T \end{cases}$$
 
-> **직관.** 최종 보상 $r_\phi$는 끝 토큰에만 붙고, 중간 토큰에는 매 스텝 로그비 형태의 KL 페널티만 흐른다. 이렇게 하면 참조에서 벗어나는 토큰이 **즉시** 음의 신호를 받아, 문장 말미가 아니라 발생 지점에서 교정되는 의미를 갖는다. 전체 합은 시퀀스 단위 KL 제약과 동일한 역할을 한다.
+> **직관.** 최종 보상 $r_\phi$는 끝 토큰에만 붙고, 중간 토큰에는 매 스텝 로그비 형태의 KL 페널티만 흐른다. 표본 하나의 로그비는 음수일 수도 있으므로 토큰별 항이 항상 벌점인 것은 아니다. 현재 정책에서 뽑은 완성 응답에 대해 로그비를 합하고 기대값을 취하면 시퀀스 KL이 된다. 표본과 기대값을 구분해야 페널티의 부호를 올바르게 해석할 수 있다.
 
 여기서 $\beta \log \frac{\pi_\theta}{\pi_{ref}}$항은 각 토큰에서 현재 정책이 레퍼런스에서 얼마나 벗어났는지를 패널티로 부여합니다.
 
@@ -67,7 +67,7 @@ $\beta$는 보상 최대화와 레퍼런스 모델 유지 사이의 균형을 �
 |-----------|------|------|
 | $\beta \to 0$ | 보상 최대화에 집중 | 보상 해킹, 분포 붕괴 |
 | $\beta$ 작음 (0.01~0.1) | 적극적인 정책 업데이트 | 불안정성 증가 |
-| $\beta$ 중간 (0.1~0.5) | 균형 잡힌 학습 | 대부분의 실제 설정 |
+| $\beta$ 중간 | 보상과 참조 유지 절충 | 보상 스케일에 따라 의미가 다름 |
 | $\beta$ 큼 (>1) | 레퍼런스에 가깝게 유지 | 보상 개선이 미미 |
 | $\beta \to \infty$ | $\pi_\theta = \pi_{ref}$ | 학습 효과 없음 |
 
@@ -75,13 +75,11 @@ Ouyang et al. (2022)의 InstructGPT에서는 $\beta = 0.2$를 사용했으며, Z
 
 ## Gao et al. (2022)의 실증 분석
 
-Gao et al. (2022)은 KL 발산과 보상 모델 점수, 실제 인간 선호 사이의 관계를 정량적으로 분석했습니다. 핵심 발견:
+Gao et al.은 큰 보상 모델을 gold로 두고 그 모델의 레이블로 작은 proxy 모델을 학습한 통제 실험을 수행했습니다. 이 gold 점수는 실제 인간 선호 자체가 아닙니다. proxy를 강하게 최적화하면 proxy 점수는 오르지만 gold 점수는 하락할 수 있습니다.
 
-$$\text{Gold reward} \approx \alpha \cdot r_{proxy} - \beta \cdot D_{KL}(\pi_\theta \| \pi_{ref})$$
+논문은 최적화 방식·모델 크기에 따라 다른 곡선을 관찰합니다. 모든 RLHF 모델에 적용되는 "KL 10~20 nats의 안전 한계"는 제시하지 않습니다. KL의 토큰·시퀀스 집계 방식과 보상 단위를 함께 기록하고, 독립 평가로 중단 시점을 결정합니다.
 
-> **직관.** 대리 보상은 KL이 커지면 계속 오르지만, 실제 인간 선호는 일정 지점에서 **꺾여 내려간다**. 이는 KL이 일종의 "신뢰 반경"으로, 그 바깥에서는 보상 모델의 외삽이 망가진다는 의미다. 따라서 β는 단순한 규제가 아니라 모델이 신뢰할 수 있는 영역 안에서 움직이게 하는 역할을 한다.
-
-보상 모델 점수(대리 보상)는 KL 발산이 증가할수록 실제 인간 선호(골드 보상)와 점점 괴리됩니다. 특히 KL이 약 10~20 nats를 넘으면 대리 보상이 높아도 실제 선호는 오히려 하락하는 **over-optimization** 현상이 명확히 나타났습니다.
+KL 페널티와 PPO 클리핑의 기준도 다릅니다. 전자는 참조 정책을, 후자는 롤아웃 당시 정책을 비교합니다. 클리핑이 있다는 이유만으로 참조 정책에 대한 KL 항이 수학적으로 중복되지는 않습니다.
 
 ## KL 페널티가 없을 때의 실패 사례
 

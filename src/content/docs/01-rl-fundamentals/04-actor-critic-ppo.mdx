@@ -10,7 +10,7 @@ learning_objectives:
 estimated_minutes: 40
 references:
   - { title: "Proximal Policy Optimization Algorithms", authors: "Schulman, J., Wolski, F., Dhariwal, P., Radford, A., & Klimov, O.", year: 2017, url: "https://arxiv.org/abs/1707.06347", note: "PPO-Clip 목적 함수와 실증 비교의 1차 출처 — 본 장의 핵심 수식과 하이퍼파라미터 기본값의 근거." }
-  - { title: "Trust Region Policy Optimization", authors: "Schulman, J., Levine, S., Abbeel, P., Jordan, M., & Moritz, P.", year: 2015, url: "https://arxiv.org/abs/1502.05477", note: "신뢰 영역 제약과 단조 개선 정리의 원전 — PPO가 왜 1차 근사로 충분한지의 이론적 배경." }
+  - { title: "Trust Region Policy Optimization", authors: "Schulman, J., Levine, S., Moritz, P., Jordan, M., & Abbeel, P.", year: 2015, url: "https://arxiv.org/abs/1502.05477", note: "신뢰 영역 제약과 단조 개선 정리의 원전 — PPO가 왜 1차 근사로 충분한지의 이론적 배경." }
   - { title: "High-Dimensional Continuous Control Using Generalized Advantage Estimation", authors: "Schulman, J., Moritz, P., Levine, S., Jordan, M., & Abbeel, P.", year: 2016, url: "https://arxiv.org/abs/1506.02438", note: "GAE 편향-분산 트레이드오프 정리의 원전 — 본 장 GAE 수식과 λ 파라미터 해석의 근거." }
   - { title: "Spinning Up: Proximal Policy Optimization", authors: "OpenAI", url: "https://spinningup.openai.com/en/latest/algorithms/ppo.html", note: "PPO 의사코드 · 클리핑 해석 · 구현 디테일을 현대적 표기로 정리 — 본문과 대응시켜 읽기 좋음." }
 ---
@@ -47,8 +47,10 @@ graph TD
     Env --> Reward["Reward r_t"]
     Env --> NextState["Next State s_t+1"]
     Critic --> Value["V(s_t)"]
-    Reward --> TD["TD Error\nd = r + gV(s) - V(s)"]
+    Reward --> TD["TD Error\nd = r + gV(s_next) - V(s)"]
     Value --> TD
+    NextState --> NextValue["V(s_t+1)"]
+    NextValue --> TD
     TD --> Actor
     TD --> Critic
 `} caption="Figure 1: Actor-Critic Architecture" client:load />
@@ -59,7 +61,7 @@ Schulman et al. (2016)이 제안한 **GAE(Generalized Advantage Estimation)** �
 
 $$\hat{A}_t^{GAE(\gamma, \lambda)} = \sum_{l=0}^{\infty} (\gamma \lambda)^l \delta_{t+l}$$
 
-> **직관.** GAE는 1-step부터 Monte Carlo까지의 여러 시계 길이(horizon) 어드밴티지들을 $\gamma\lambda$로 기하 평균 내는 역할을 하므로, $\lambda$가 0에 가까우면 근시안적 편향, 1에 가까우면 먼 미래까지의 분산을 더 많이 허용한다는 의미로 해석됩니다.
+> **직관.** GAE는 1-step부터 Monte Carlo까지의 여러 시계 길이(horizon) 어드밴티지들을 $\gamma\lambda$로 지수 가중합으로 결합하는 역할을 하므로, $\lambda$가 0에 가까우면 근시안적 편향, 1에 가까우면 먼 미래까지의 분산을 더 많이 허용한다는 의미로 해석됩니다.
 
 여기서 $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$는 TD 잔차입니다. $\lambda = 0$이면 1-step TD(낮은 분산, 높은 편향), $\lambda = 1$이면 Monte Carlo(높은 분산, 낮은 편향)에 해당합니다. 실제로는 $\lambda \in [0.9, 0.99]$가 자주 사용됩니다.
 
@@ -77,7 +79,7 @@ $$\text{subject to } \mathbb{E}_s \left[ D_{KL}(\pi_\theta(\cdot \mid s) \| \pi_
 
 > **직관.** 새 정책이 기존 정책에서 KL 구 반경 $\delta$ 안에만 머물도록 신뢰 영역을 묶어 두는 의미이므로, 확률 비율이 폭발해 추정치가 믿을 수 없게 되는 일을 예방하는 안전장치 역할을 합니다.
 
-TRPO는 이론적으로 단조 개선(monotonic improvement)을 보장하지만, **2차 최적화(second-order optimization)** 가 필요하여 계산 비용이 매우 높고 구현이 복잡합니다.
+TRPO의 이상화된 성능 하한과 실제 평균 KL·함수 근사 구현의 보장을 구분해야 합니다. 실용적인 TRPO 구현은 근사 해법이며 임의의 업데이트에서 단조 개선을 보장하지 않습니다. 또한 **2차 최적화(second-order optimization)** 가 필요하여 계산 비용이 매우 높고 구현이 복잡합니다.
 
 ## PPO: 근위 정책 최적화
 
@@ -95,7 +97,7 @@ $r_t(\theta) = 1$이면 정책이 변하지 않았고, $r_t > 1$이면 해당 �
 
 $$L^{CLIP}(\theta) = \mathbb{E}_t \left[ \min\left( r_t(\theta) \hat{A}_t,\ \text{clip}(r_t(\theta),\ 1 - \epsilon,\ 1 + \epsilon) \hat{A}_t \right) \right]$$
 
-> **직관.** 비율이 $1\pm\epsilon$ 영역을 벗어나면 클립된 항이 $\min$을 통해 선택되어 그래디언트를 차단하는 역할을 합니다. 이전 정책에서 너무 멀어지는 업데이트를 자동으로 방지하는 안전장치 역할이며, "좋은 행동을 너무 크게 증폭하거나 나쁜 행동을 너무 극단적으로 억제"하는 것을 막는 의미를 갖습니다.
+> **직관.** 양의 advantage와 상한 초과가 만날 때, 또는 음의 advantage와 하한 미만이 만날 때 추가 개선 유인이 잘립니다. 반대 방향에서는 교정 기울기가 남습니다. 클리핑의 역할은 대리 목적식의 개선 유인을 제한하는 것입니다. 실제 비율이나 KL이 일정 구간에 머문다는 보장은 아닙니다.
 
 클리핑 메커니즘의 작동 원리:
 
@@ -104,11 +106,11 @@ $$L^{CLIP}(\theta) = \mathbb{E}_t \left[ \min\left( r_t(\theta) \hat{A}_t,\ \tex
 | $r_t > 1 + \epsilon$ | 클리핑으로 과도한 증가 억제 | 하한 없음 (빠른 감소 허용) |
 | $r_t < 1 - \epsilon$ | 상한 없음 (빠른 증가 허용) | 클리핑으로 과도한 감소 억제 |
 
-$\min$ 연산은 낙관적 업데이트를 방지하는 **보수적 보장(conservative bound)** 역할을 합니다.
+$\min$은 잘리지 않은 표본 대리 목적식보다 큰 값을 주지 않습니다. 이것이 실제 환경 수익 개선의 하한을 보장하는 것은 아닙니다.
 
 ## PPO의 전체 손실함수
 
-실제 구현에서 PPO의 전체 손실함수는 세 항을 결합합니다:
+아래는 최대화하는 전체 목적식입니다. 손실을 최소화하는 구현에서는 전체 부호를 반대로 둡니다:
 
 $$L(\theta) = L^{CLIP}(\theta) - c_1 L^{VF}(\theta) + c_2 S[\pi_\theta]$$
 
@@ -120,7 +122,7 @@ $$L(\theta) = L^{CLIP}(\theta) - c_1 L^{VF}(\theta) + c_2 S[\pi_\theta]$$
 
 ## PPO가 널리 쓰이는 이유
 
-PPO는 RLHF를 포함한 LLM 정렬에서 사실상의 표준 알고리즘으로 자리잡았습니다. 그 이유는 다음과 같습니다:
+PPO는 초기 PPO-RLHF의 대표 알고리즘이며, 현재는 critic 없는 방법과 직접 선호 최적화도 함께 사용합니다. 그 이유는 다음과 같습니다:
 
 1. **구현 단순성**: 1차 최적화만 필요하며, 기존 딥러닝 프레임워크로 손쉽게 구현 가능
 2. **샘플 효율성**: 여러 에포크에 걸쳐 동일한 데이터 재사용 가능 (off-policy 특성 부분 활용)

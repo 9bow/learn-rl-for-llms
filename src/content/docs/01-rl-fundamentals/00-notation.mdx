@@ -77,7 +77,7 @@ s_t ── π_θ(a_t | s_t) ──▶ a_t ── P(s_{t+1} | s_t, a_t) ──▶
 
 - $\nabla_\theta \log \pi_\theta(a \mid s)$: **스코어(score) 함수**. 로그 가능도의 기울기이며, 정책 기울기 정리의 핵심.
 - $J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]$: **정책 성과 지표(expected return)**.
-- $\nabla_\theta J(\theta) = \mathbb{E}_\pi[\nabla_\theta \log \pi_\theta(a_t \mid s_t) \cdot A^\pi(s_t, a_t)]$: **정책 기울기 정리(policy gradient theorem)** — 어드밴티지 버전.
+- $\nabla_\theta J(\theta) = \mathbb{E}_{\tau\sim\pi}[\sum_t\gamma^t\nabla_\theta\log\pi_\theta(a_t\mid s_t)A^\pi(s_t,a_t)]$: **정책 기울기 정리(policy gradient theorem)** — 할인된 시작 수익 목적의 어드밴티지 버전. 방문 분포로 쓰는 식에서는 할인 가중치와 정규화 상수를 따로 정의한다.
 
 <a id="ppo"></a>
 ## PPO 관련
@@ -97,14 +97,14 @@ s_t ── π_θ(a_t | s_t) ──▶ a_t ── P(s_{t+1} | s_t, a_t) ──▶
 - $y_l$: **덜 선호된 응답(losing completion)**.
 - $\sigma(x) = \dfrac{1}{1 + e^{-x}}$: **시그모이드(logistic / sigmoid function)**. Bradley-Terry 모델의 link function으로도 쓰입니다.
 - $\beta$: **KL 제약 강도(regularization strength)**. DPO · RLHF 모두 참조 정책과의 분리 허용폭을 조절.
-- DPO loss: $-\log \sigma\!\bigl(\beta \cdot (\log \pi_\theta(y_w \mid x)/\pi_{ref}(y_w \mid x) - \log \pi_\theta(y_l \mid x)/\pi_{ref}(y_l \mid x))\bigr)$.
+- DPO loss: $-\log \sigma\!\bigl(\beta \cdot (\log \frac{\pi_\theta(y_w \mid x)}{\pi_{ref}(y_w \mid x)} - \log \frac{\pi_\theta(y_l \mid x)}{\pi_{ref}(y_l \mid x)})\bigr)$.
 
 <a id="grpo"></a>
 ## GRPO · 그룹 정책 최적화
 
 - $G$: **그룹 크기(group size)** — 한 프롬프트당 샘플링하는 응답 개수.
 - $\hat{A}_i$: 그룹 내 정규화된 어드밴티지(위 참조).
-- $\rho_i(\theta) = \dfrac{\pi_\theta(y_i \mid x)}{\pi_{\theta_{old}}(y_i \mid x)}$: 응답 $y_i$에 대한 확률 비율.
+- $\rho_{i,t}(\theta) = \dfrac{\pi_\theta(y_{i,t}\mid x,y_{i,<t})}{\pi_{\theta_{old}}(y_{i,t}\mid x,y_{i,<t})}$: 응답 $i$의 토큰 $t$에 대한 확률 비율. 원 GRPO는 토큰 수준 비율을 쓴다.
 
 <a id="divergences"></a>
 ## 정보량과 발산
@@ -113,7 +113,7 @@ s_t ── π_θ(a_t | s_t) ──▶ a_t ── P(s_{t+1} | s_t, a_t) ──▶
 - $\mathcal{H}(p) = -\sum_x p(x) \log p(x)$: **엔트로피**.
 - $\mathcal{H}(p, q) = -\sum_x p(x) \log q(x)$: **교차 엔트로피(cross-entropy)**.
 
-> **비대칭성.** $D_{KL}(p \parallel q) \neq D_{KL}(q \parallel p)$. RLHF의 전진 KL(forward) $D_{KL}(\pi_\theta \parallel \pi_{ref})$는 "$\pi_\theta$가 커버하는 곳마다 $\pi_{ref}$가 작지 않아야 한다" (mode-covering)는 압력을, 역방향(reverse) $D_{KL}(\pi_{ref} \parallel \pi_\theta)$는 mode-seeking 압력을 줍니다.
+> **비대칭성.** $D_{KL}(p \parallel q) \neq D_{KL}(q \parallel p)$. 고정된 참조 분포에 학습 정책을 맞추는 관점에서 $D_{KL}(\pi_\theta \parallel \pi_{ref})$는 참조가 거의 확률을 주지 않는 영역을 피하게 하며 mode-seeking 성향을 가질 수 있습니다. 반대 방향인 $D_{KL}(\pi_{ref} \parallel \pi_\theta)$는 참조의 여러 모드를 덮는 mode-covering 성향을 가질 수 있습니다. forward/reverse 명칭은 어느 분포를 목표로 삼는지에 따라 혼동되므로 분포 순서를 직접 씁니다.
 
 <a id="partition-and-normalization"></a>
 ## 분배 함수와 정규화

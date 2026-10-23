@@ -18,7 +18,7 @@ references:
     year: 2023
     url: "https://arxiv.org/abs/2303.08774"
   - title: "Constitutional AI: Harmlessness from AI Feedback"
-    authors: "Bai, Y., Jones, A., Ndousse, K., Askell, A., et al."
+    authors: "Bai, Y., et al."
     year: 2022
     url: "https://arxiv.org/abs/2212.08073"
   - title: "Llama 2: Open Foundation and Fine-Tuned Chat Models"
@@ -35,12 +35,12 @@ Ouyang et al. (2022)의 **InstructGPT** 는 RLHF를 대규모 언어 모델에 �
 
 InstructGPT는 OpenAI API를 통해 실제 사용자가 제출한 프롬프트를 기반으로 데이터를 구성했습니다. **40명의 계약직 주석자** 를 채용하여 세 가지 유형의 데이터를 수집했습니다:
 
-**SFT 데이터 (~13,000개)**:
+**SFT 데이터 (~13,000개 프롬프트)**:
 - 주석자가 프롬프트를 직접 작성하거나 API에서 샘플링
 - 주석자가 고품질 응답을 직접 작성
 - 세 가지 프롬프트 유형: 일반(plain), 소수샷(few-shot), 사용자 기반(user-based)
 
-**RM 데이터 (~33,000개 비교 쌍)**:
+**RM 데이터 (~33,000개 RM 프롬프트)**:
 - 동일 프롬프트에 대해 4~9개 모델 응답 생성
 - 주석자가 모든 쌍의 선호도 순위 매김
 - $\binom{K}{2}$개의 비교 쌍을 효율적으로 추출
@@ -55,21 +55,13 @@ InstructGPT는 OpenAI API를 통해 실제 사용자가 제출한 프롬프트�
 
 **2단계 RM**: $\text{GPT-3}_{SFT}$의 6B 버전을 보상 모델로 학습 (175B 대신 6B 사용 — 4개 모델 동시 유지 시 메모리 절감). Bradley-Terry 손실로 학습. 여러 순위를 한 번에 학습하는 효율적 배치 구성 사용.
 
-**3단계 PPO**: $\text{GPT-3}_{SFT}$ (1.3B, 6B, 175B 세 크기)를 Actor로, 6B RM을 보상 모델로, SFT 모델을 레퍼런스로 PPO 학습. KL 계수 $\beta$는 적응형으로 조정.
+**3단계 PPO**: $\text{GPT-3}_{SFT}$ (1.3B, 6B, 175B 세 크기)를 Actor로, 6B RM을 보상 모델로, SFT 모델을 레퍼런스로 PPO 학습. 정책과 SFT 참조 사이의 KL 페널티 사용. 다른 PPO 구현의 적응형 KL 제어를 이 논문의 필수 설정으로 혼합하지 않는다.
 
 ## 핵심 실험 결과
 
-InstructGPT의 가장 놀라운 발견은 **크기보다 정렬이 중요할 수 있다** 는 것입니다:
+논문의 인간 평가에서 1.3B InstructGPT의 응답이 175B GPT-3의 응답보다 선호되었다. 이는 연구에서 수집한 프롬프트 분포와 주석 기준의 결과다. 모델 크기만으로 사용자 선호가 결정되지 않음을 보여 주지만, 모든 능력에서 1.3B가 175B보다 낫다는 뜻은 아니다.
 
-> 1.3B InstructGPT 모델이 175B GPT-3보다 인간 평가자에게 더 선호됨 (85% vs 71%, 각자 대비 기본값과 비교)
-
-상세 결과:
-
-| 비교 | InstructGPT 선호 비율 |
-|------|---------------------|
-| InstructGPT 1.3B vs GPT-3 175B | 85% |
-| InstructGPT 175B vs GPT-3 175B | 97% |
-| InstructGPT 175B vs GPT-3 175B SFT | 81% |
+선호율은 비교 대상·모델 크기·프롬프트·동점 처리에 따라 달라진다. 서로 다른 비교의 비율을 합친 표를 제시하지 않는다.
 
 진실성(truthfulness) 측면에서도 InstructGPT는 TruthfulQA에서 GPT-3 대비 개선을 보였으나, 일부 NLP 벤치마크(SQuAD, HellaSwag 등)에서 소폭 하락 — **alignment tax** 의 실증적 관찰.
 
@@ -95,18 +87,18 @@ Meta의 **Llama 2**(Touvron et al., 2023)는 오픈소스 모델 중 RLHF 적용
 
 - **Ghost Attention(GAtt)**: 다중 턴 대화에서 시스템 프롬프트를 일관되게 따르는 새로운 기법
 - **이중 보상 모델**: 유용성(helpfulness) RM과 안전성(safety) RM을 별도 학습
-- **RLHF-V 반복**: 5번의 반복적 RLHF 적용으로 지속적 개선
+- **RLHF V1~V5 반복**: 5번의 반복적 RLHF 적용으로 지속적 개선
 - **100만 개 이상의 인간 선호 주석** 수집 (규모에서 InstructGPT 대비 30배 이상)
 
 ## 주요 RLHF 적용 모델 비교
 
 | 모델 | 조직 | RLHF 방법 | 데이터 규모 | 공개 여부 |
 |------|------|----------|------------|---------|
-| InstructGPT | OpenAI | PPO-RLHF | ~77K 쌍 | 논문 공개 |
-| ChatGPT | OpenAI | PPO-RLHF (추정) | 미공개 | 모델 공개 |
+| InstructGPT | OpenAI | PPO-RLHF | SFT·RM·PPO의 서로 다른 프롬프트 집합 | 논문 공개 |
+| ChatGPT 초기판 | OpenAI | 공개한 대화형 RLHF 설명 범위 | 전체 세부 미공개 | 서비스 공개 |
 | GPT-4 | OpenAI | PPO-RLHF + RBRM | 미공개 | 기술 보고서 |
 | Claude 1/2/3 | Anthropic | Constitutional AI | 미공개 | 논문 공개 |
 | Llama 2 Chat | Meta | PPO-RLHF (이중 RM) | ~100만 쌍 | 모델+논문 |
 | Gemini | Google | RLHF (추정) | 미공개 | 기술 보고서 |
 
-InstructGPT는 RLHF라는 아이디어를 대규모 LLM에 처음으로 성공적으로 적용한 연구로서, 현재 AI 정렬 연구의 출발점이 되었습니다. 이후 등장한 모든 주요 언어 모델은 정도의 차이는 있지만 RLHF 또는 그 변형을 핵심 정렬 방법론으로 채택하고 있습니다.
+InstructGPT는 RLHF라는 아이디어를 대규모 LLM에 처음으로 성공적으로 적용한 연구로서, 현재 AI 정렬 연구의 출발점이 되었습니다. 이 장은 초기 정렬 연구의 사례다. 이후 모델의 현재 훈련 절차나 알고리즘을 과거 보고서만으로 추정하지 않는다.

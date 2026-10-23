@@ -10,7 +10,7 @@ learning_objectives:
 estimated_minutes: 30
 references:
   - title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model"
-    authors: "Rafailov, R., Sharma, A., Mitchell, E., Manning, C. D., Ermon, S., & Finn, C."
+    authors: "Rafailov, R., Sharma, A., Mitchell, E., Ermon, S., Manning, C. D., & Finn, C."
     year: 2023
     url: "https://arxiv.org/abs/2305.18290"
   - title: "Training language models to follow instructions with human feedback"
@@ -35,8 +35,8 @@ references:
 |------|-----------|------------|
 | 대표 알고리즘 | REINFORCE, PPO, A3C | Q-learning, DQN, SAC |
 | 데이터 수집 | 현재 정책으로 직접 | 별도 행동 정책 또는 기존 데이터셋 |
-| 샘플 효율성 | 낮음 (데이터 재사용 불가) | 높음 (리플레이 버퍼 활용) |
-| 분산 | 낮음 | 높음 (중요도 샘플링 필요) |
+| 데이터 재사용 | 제한적, PPO는 같은 롤아웃에 여러 업데이트 | 과거 행동 정책 자료 사용 가능 |
+| 추정 오차 | 롤아웃·baseline에 의존 | 가치 추정·중요도 보정 등에 의존 |
 | 구현 복잡도 | 상대적으로 단순 | 복잡 |
 
 ## 오프라인 RL의 정의와 특수성
@@ -55,7 +55,7 @@ PPO 기반 RLHF는 전형적인 온라인 접근법입니다:
 4. 반복
 
 **온라인 RLHF의 장점:**
-- 현재 정책의 분포에서 데이터를 수집하므로 분포 이동 문제 없음
+- 현재 정책의 응답을 추가 수집하여 과거 정책 자료와의 불일치 완화
 - 탐색(exploration)을 통해 새로운 고보상 반응 발견 가능
 - 정책이 개선될수록 더 좋은 훈련 신호를 자연스럽게 획득
 
@@ -88,7 +88,7 @@ $$\mathcal{L}_{DPO}(\pi_\theta; \pi_{ref}) = -\mathbb{E}_{(x, y_w, y_l) \sim \ma
 
 오프라인 RL에서 분포 이동은 치명적입니다. 학습 데이터가 정책 $\pi_{old}$로 수집되었는데, 현재 정책 $\pi_\theta$가 크게 달라지면 학습 신호가 부정확해집니다.
 
-Ramamurthy et al. (2023)은 NLP 과제에서 온라인 vs 오프라인 RL을 체계적으로 비교하여, 온라인 방법이 장기적으로 오프라인 방법보다 우수한 성능을 보임을 입증했습니다. 특히 탐색이 중요한 과제에서 그 차이가 두드러졌습니다.
+Ramamurthy et al. (2023)은 NLP 과제에서 온라인 vs 오프라인 RL을 체계적으로 비교하여, 여러 NLP 과제의 정책 최적화 방법을 비교했습니다. 한 연구의 결과가 모든 과제에서 온라인 방법의 우위를 증명하지는 않습니다. 특히 탐색이 중요한 과제에서 그 차이가 두드러졌습니다.
 
 ## 하이브리드 접근법
 
@@ -102,8 +102,8 @@ Ramamurthy et al. (2023)은 NLP 과제에서 온라인 vs 오프라인 RL을 체
 |------|----------------|--------------|----------|
 | PPO-RLHF | 온라인 | 필요 | 매우 높음 |
 | DPO | 오프라인 | 불필요 | 낮음 |
-| Iterative DPO | 하이브리드 | 불필요 | 중간 |
+| Iterative DPO | 하이브리드 | 비교 신호 필요, RM은 선택 | 중간 |
 | RAFT | 하이브리드 | 필요 | 중간 |
-| Online DPO | 온라인 | 불필요 | 중간 |
+| Online DPO | 온라인 | 비교 신호 필요, RM은 선택 | 중간 |
 
 연구 트렌드는 온라인 데이터 수집의 탐색 이점을 유지하면서 DPO의 구현 단순성을 결합하는 방향으로 이동하고 있습니다.

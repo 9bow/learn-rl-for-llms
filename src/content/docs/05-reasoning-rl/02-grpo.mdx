@@ -29,7 +29,7 @@ import Mermaid from '../../../components/learning/Mermaid.tsx';
 
 ## PPO의 Critic 문제
 
-PPO(Proximal Policy Optimization)는 강력한 RL 알고리즘이지만 LLM 훈련에서 실용적 문제가 있다. Advantage를 추정하기 위해 **Critic(가치 함수) 모델** 이 필요하며, 이 모델은 정책 모델과 동일한 크기를 가져야 정확한 추정이 가능하다. 결과적으로 전체 시스템은 정책 모델, 참조 모델, 보상 모델, Critic 모델의 4개 모델을 동시에 메모리에 올려야 한다.
+PPO(Proximal Policy Optimization)는 강력한 RL 알고리즘이지만 LLM 훈련에서 실용적 문제가 있다. Advantage를 추정하기 위해 **Critic(가치 함수) 모델** 이 필요하며, 별도의 대형 가치 모델은 메모리·연산 비용을 늘린다. 다만 Critic이 반드시 정책과 같은 크기여야 하는 것은 아니며, 파라미터 공유나 작은 Critic도 가능하다. 학습된 보상 모델을 사용하는 전형적인 PPO-RLHF 구성은 정책·참조·보상·가치의 네 역할을 둔다.
 
 70B 파라미터 모델에서 이는 수백 GB의 GPU 메모리를 요구하며, 대부분의 연구 기관에서 접근하기 어렵다. DeepSeek 팀은 이 문제를 해결하기 위해 **GRPO(Group Relative Policy Optimization)** 를 제안했다.
 
@@ -43,45 +43,45 @@ GRPO는 Critic 모델을 완전히 제거하고, 대신 **동일 프롬프트에
 3. 그룹 내 상대적 [어드밴티지](../../01-rl-fundamentals/00-notation/#value-functions)를 계산한다.
 
 $$
-\hat{A}_i = \frac{r_i - \text{mean}(\mathbf{r})}{\text{std}(\mathbf{r})}
+\hat{A}_i = \frac{r_i - \text{mean}(\mathbf{r})}{\text{std}(\mathbf{r}) + \epsilon_{\text{num}}}
 $$
 
-> **직관.** 그룹 내 평균과 표준편차로 보상을 정규화한다. 값 함수 없이도 advantage 추정이 가능해지고, 보상 스케일 변동에 강건해지는 역할을 한다. 평균을 빼면 "그룹 baseline 대비 상대 이득"이 되고, 표준편차로 나누면 보상 단위가 달라져도 같은 강도로 학습되는 의미가 있다. 왜 그룹인가 — 같은 프롬프트에서 뽑힌 응답끼리 비교해야 난이도 차이가 상쇄되기 때문이다.
+> **직관.** 그룹 내 평균과 표준편차로 보상을 정규화한다. 값 함수 없이도 advantage 추정이 가능해지고, 보상 스케일 변동에 강건해지는 역할을 한다. 평균을 빼면 "그룹 baseline 대비 상대 이득"이 되고, 표준편차로 나누면 보상 단위가 달라져도 같은 강도로 학습되는 의미가 있다. 같은 프롬프트의 응답끼리 비교하지만, 표준편차로 나누면 문제별 가중치가 달라진다. 다음 장의 Dr. GRPO는 이 난이도 편향을 다룬다.
 
-여기서 $\mathbf{r} = (r_1, r_2, \ldots, r_G)$는 그룹 내 보상 벡터다. 평균을 빼고 표준편차로 나누는 z-score 정규화로, 그룹 내에서 상대적으로 좋은 응답이 양의 advantage, 나쁜 응답이 음의 advantage를 가진다.
+여기서 $\mathbf{r} = (r_1, r_2, \ldots, r_G)$는 그룹 내 보상 벡터다. 평균을 빼고 표준편차로 나누는 z-score 정규화로, 그룹 내에서 상대적으로 좋은 응답이 양의 advantage, 나쁜 응답이 음의 advantage를 가진다. 수치 안정화 상수 $\epsilon_{\text{num}}>0$를 더하면 동점 그룹은 advantage가 모두 0이 된다. 이런 그룹에서는 보상에 의한 정책 학습 신호가 사라진다.
 
 ## GRPO 목표 함수
 
-GRPO의 학습 목표는 [PPO의 클리핑 목표](../../01-rl-fundamentals/00-notation/#ppo)와 [KL 발산](../../01-rl-fundamentals/00-notation/#divergences) 페널티를 결합한다.
+원 논문은 [이전 정책](../../01-rl-fundamentals/00-notation/#policies)으로 뽑은 응답의 각 토큰에 [PPO 클리핑](../../01-rl-fundamentals/00-notation/#ppo)을 적용한다. 확률비는 응답 전체의 확률비가 아니라 같은 문맥에서 다음 토큰의 확률비다.
 
 $$
-L_{\text{GRPO}}(\theta) = \mathbb{E}_{x, \{y_i\}}\!\left[\frac{1}{G}\sum_{i=1}^{G} \min\!\left(\rho_i \hat{A}_i,\ \text{clip}(\rho_i, 1-\varepsilon, 1+\varepsilon)\hat{A}_i\right) - \beta\, \mathbb{D}_{\mathrm{KL}}[\pi_\theta \| \pi_{\text{ref}}]\right]
+\rho_{i,t}=\frac{\pi_\theta(y_{i,t}\mid x,y_{i,<t})}{\pi_{\theta_{\text{old}}}(y_{i,t}\mid x,y_{i,<t})}
 $$
 
-> **직관.** PPO처럼 이전 정책 대비 비율 [\\(\rho_i\\)](../../01-rl-fundamentals/00-notation/#grpo)를 자르되, 그룹 단위로 묶어 계산한다. 메모리를 아끼면서 PPO의 안전성을 유지하는 역할을 하며, 뒤의 $-\beta\, D_{KL}$는 그룹 단위 KL로 참조 모델과의 이탈을 제어한다는 의미다. 왜 min-clip인가 — 비율이 커져도 어드밴티지가 양수이면 무한정 올라가지 않도록 결정하기 때문이다.
+> **직관.** 롤아웃 당시보다 현재 정책이 같은 토큰을 얼마나 더 선택하는지 비교한다. 이는 토큰별 정책 변화를 해석하는 비율이다. 응답 전체에서 비율을 구성하는 GSPO 계열과 구분해야 한다.
 
-여기서 $\rho_i = \frac{\pi_\theta(y_i|x)}{\pi_{\theta_{\text{old}}}(y_i|x)}$는 중요도 샘플링 비율이고, $\varepsilon$은 [클립 폭](../../01-rl-fundamentals/00-notation/#ppo)(일반적으로 0.2), $\beta$는 KL 페널티 계수다.
-
-실제 구현에서는 토큰 수준으로 손실을 계산한다.
+원 GRPO의 최대화 목적은 다음과 같다. $D_{i,t}$는 해당 문맥에서 참조 정책에 대한 [KL](../../01-rl-fundamentals/00-notation/#divergences) 추정량이다.
 
 $$
-L_{\text{GRPO}}(\theta) = \frac{1}{G}\sum_{i=1}^{G}\frac{1}{|y_i|}\sum_{t=1}^{|y_i|} \min\!\left(\rho_{i,t} \hat{A}_i,\ \text{clip}(\rho_{i,t}, 1-\varepsilon, 1+\varepsilon)\hat{A}_i\right)
+J_{\text{GRPO}}=\frac{1}{G}\sum_{i=1}^{G}\frac{1}{|y_i|}\sum_{t=1}^{|y_i|}\left[\min\!\left(\rho_{i,t}\hat A_i,\operatorname{clip}(\rho_{i,t},1-\varepsilon,1+\varepsilon)\hat A_i\right)-\beta D_{i,t}\right]
 $$
 
-> **직관.** 손실을 토큰 수준으로 쪼개 각 단계의 확률 비율을 개별적으로 클립한다. 긴 reasoning 궤적의 중간 토큰까지 학습 신호가 전달되는 역할을 하며, 시퀀스 평균과 달리 응답 길이에 관계없이 단위 토큰당 그래디언트 크기가 일관되게 결정된다는 의미다.
+> **직관.** 응답마다 토큰 평균을 내고 그 응답들을 다시 평균한다. 따라서 짧은 응답의 한 토큰이 긴 응답의 한 토큰보다 큰 가중치를 받는다. 클리핑의 역할은 목적식의 개선 유인을 제한하는 것이며 확률비 자체를 구간 안에 고정하지 않는다.
+
+KL은 고정 참조 정책과 비교하고, 클리핑은 이전 롤아웃 정책과 비교한다. 두 장치는 서로 다른 기준을 쓴다. 최근 구현에서는 KL 항이나 손실 집계 방식을 바꾸므로, 논문 이름만으로 실제 목적식을 판단하면 안 된다.
 
 ## Critic 제거의 이점과 트레이드오프
 
 | 항목 | PPO | GRPO |
 |------|-----|------|
-| 필요 모델 수 | 4개 | 3개 (Critic 제거) |
+| 전형적 구성 | 정책·참조·보상·가치 | Critic 제거, 규칙 보상이면 RM도 불필요 |
 | Advantage 추정 방식 | 학습된 가치 함수 | 그룹 평균 |
-| Advantage 추정 정확도 | 높음 (학습된 모델) | 낮음 (샘플 통계) |
+| 추정 오차 | 가치 함수 오차에 영향받음 | 그룹 크기·보상 분산에 영향받음 |
 | 메모리 사용량 | 더 많음 | 더 적음 |
 | 구현 복잡도 | 높음 | 중간 |
-| 샘플 효율성 | 높음 | 낮음 (G배 샘플 필요) |
+| 롤아웃 비용 | 배치·가치 추정 설정에 의존 | 프롬프트당 G개 생성 비용 필요 |
 
-Advantage 추정 정확도는 그룹 크기 $G$에 따라 달라진다. 일반적으로 $G = 4 \sim 16$을 사용하며, 더 큰 $G$는 더 정확한 추정을 제공하지만 계산 비용이 선형으로 증가한다.
+Advantage 추정 정확도는 그룹 크기 $G$에 따라 달라진다. $G$를 늘리면 그룹 통계와 탐색 범위가 달라지지만, 같은 토큰 예산에서 성능이나 표본 효율이 단조롭게 좋아지지는 않는다. 보상 분산과 생성 비용을 함께 측정한다.
 
 ## DeepSeekMath에서의 성과
 

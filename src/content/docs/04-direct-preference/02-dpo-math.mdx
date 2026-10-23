@@ -9,11 +9,11 @@ learning_objectives:
   - "최적 정책에서 보상 함수를 역으로 표현하여 DPO 손실을 도출하는 과정을 따라갈 수 있다"
 estimated_minutes: 35
 references:
-  - { title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model", authors: "Rafailov, R., Sharma, A., Mitchell, E., Manning, C. D., Ermon, S., & Finn, C.", year: 2023, url: "https://arxiv.org/abs/2305.18290", note: "DPO 원 논문. Bradley-Terry + KL-제약 RL 목적식으로부터 분배 함수가 소거되는 폐형 유도를 제시." }
+  - { title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model", authors: "Rafailov, R., Sharma, A., Mitchell, E., Ermon, S., Manning, C. D., & Finn, C.", year: 2023, url: "https://arxiv.org/abs/2305.18290", note: "DPO 원 논문. Bradley-Terry + KL-제약 RL 목적식으로부터 분배 함수가 소거되는 폐형 유도를 제시." }
   - { title: "Bradley-Terry model for paired comparisons", authors: "Bradley, R. A., & Terry, M. E.", year: 1952, url: "https://doi.org/10.2307/2334029", note: "쌍대 비교에서 선호 확률을 두 항목의 잠재 강도 차이의 로지스틱으로 모델링한 고전 논문." }
   - { title: "Fine-Tuning Language Models from Human Preferences", authors: "Ziegler, D. M., Stiennon, N., Wu, J., Brown, T. B., Radford, A., Amodei, D., Christiano, P., & Irving, G.", year: 2019, url: "https://arxiv.org/abs/1909.08593", note: "RLHF에서 KL-제약 보상 최대화 목적식을 LLM 미세조정에 처음 체계적으로 적용한 문헌. DPO 유도의 출발 목적식이 여기서 온다." }
-  - { title: "Deep Reinforcement Learning from Human Preferences", authors: "Christiano, P. F., Leike, J., Brown, T. B., Martic, M., Legg, S., & Amodei, D.", year: 2017, url: "https://arxiv.org/abs/1706.03741", note: "Bradley-Terry 기반 선호 모델을 딥러닝 보상 모델 학습에 접목한 초기 작업. DPO의 선호 확률 가정의 실증적 근거." }
-  - { title: "From r to Q*: Your Language Model is Secretly a Q-Function", authors: "Rafailov, R., Hejna, J., Park, R., & Finn, C.", year: 2024, url: "https://arxiv.org/abs/2404.12358", note: "DPO의 암묵적 보상 해석을 토큰 수준 Q-함수로 확장. 최적 정책의 지수 가중 형태와 DPO 손실의 관계를 재검토." }
+  - { title: "Deep reinforcement learning from human preferences", authors: "Christiano, P. F., Leike, J., Brown, T. B., Martic, M., Legg, S., & Amodei, D.", year: 2017, url: "https://arxiv.org/abs/1706.03741", note: "Bradley-Terry 기반 선호 모델을 딥러닝 보상 모델 학습에 접목한 초기 작업. DPO의 선호 확률 가정의 실증적 근거." }
+  - { title: "From $r$ to $Q^*$: Your Language Model is Secretly a Q-Function", authors: "Rafailov, R., Hejna, J., Park, R., & Finn, C.", year: 2024, url: "https://arxiv.org/abs/2404.12358", note: "DPO의 암묵적 보상 해석을 토큰 수준 Q-함수로 확장. 최적 정책의 지수 가중 형태와 DPO 손실의 관계를 재검토." }
 ---
 
 ## 1단계: Bradley-Terry 선호 모델

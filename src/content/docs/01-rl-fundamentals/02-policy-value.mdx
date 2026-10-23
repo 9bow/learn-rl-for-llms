@@ -69,17 +69,17 @@ $$V^\pi(A) = 0 + \gamma \cdot V^\pi(B) = 0 + 0.9 \cdot V^\pi(B)$$
 
 **V^π(B) 계산:**
 
-$$V^\pi(B) = 0 + \gamma \cdot V^\pi(G) = 0 + 0.9 \cdot 1.0 = 0.9$$
+$$V^\pi(B) = 1 + \gamma \cdot V^\pi(G) = 1 + 0.9 \cdot 0 = 1$$
 
 {/* skip-intuition: numerical substitution in worked example */}
 
 **V^π(A) 최종:**
 
-$$V^\pi(A) = 0.9 \times 0.9 = 0.81$$
+$$V^\pi(A) = 0.9 \times 1 = 0.9$$
 
 {/* skip-intuition: numerical substitution in worked example */}
 
-즉, 목표로부터 2스텝 떨어진 상태 A의 가치는 $\gamma^2 \times 1 = 0.81$이고, 1스텝 거리인 B는 $0.9$입니다. 이 직관은 "목표에 가까울수록 현재 상태의 가치가 높다"는 것을 수치로 확인시켜 줍니다.
+목표 진입 전이에서 보상 1을 받고, 종료 상태의 이후 수익은 $V^\pi(G)=0$입니다. 따라서 A의 가치는 $\gamma \times 1=0.9$이고, B는 즉시 보상 1을 받습니다. 이 직관은 "목표에 가까울수록 현재 상태의 가치가 높다"는 것을 수치로 확인시켜 줍니다.
 
 ## 행동 가치 함수 Q^π(s, a)
 
@@ -133,11 +133,11 @@ $$\pi^*(s) = \arg\max_a Q^*(s, a)$$
 
 > **직관.** $Q^*$ 표가 완성되기만 하면 별도의 학습 없이 각 상태에서 값이 가장 큰 행동만 읽어 오면 되므로, 가치 함수를 정책으로 바꿔 주는 결정 규칙 역할을 합니다.
 
-**최적 정책의 존재성**: 유한 MDP에서는 항상 결정적인 최적 정책이 존재합니다(Sutton & Barto, 2018, Chapter 3). 이는 강화학습의 근본적인 이론적 보장입니다.
+**최적 정책의 존재성**: 유한 할인 MDP에서는 결정적인 정상 최적 정책이 존재합니다(Sutton & Barto, 2018, Chapter 3). 이는 강화학습의 근본적인 이론적 보장입니다.
 
 ## 정책 반복 vs 가치 반복
 
-MDP를 풀기 위한 두 가지 대표적인 동적 프로그래밍 알고리즘을 비교합니다.
+MDP를 풀기 위한 두 가지 대표적인 동적 프로그래밍 알고리즘을 비교합니다. 아래 코드는 유한 상태·행동 공간과 $0 \leq \gamma < 1$을 가정합니다. 종료 상태는 자기 자신으로 전이하며 이후 보상이 0인 흡수 상태로 표현합니다.
 
 ### 정책 반복 (Policy Iteration)
 
@@ -146,7 +146,7 @@ MDP를 풀기 위한 두 가지 대표적인 동적 프로그래밍 알고리즘
 ```python
 def policy_iteration(mdp, gamma=0.9, tol=1e-6):
     # 임의 정책 초기화
-    policy = {s: random_action(s) for s in mdp.states}
+    policy = {s: next(iter(mdp.actions)) for s in mdp.states}
     V = {s: 0.0 for s in mdp.states}
 
     while True:
@@ -168,7 +168,13 @@ def policy_iteration(mdp, gamma=0.9, tol=1e-6):
         policy_stable = True
         for s in mdp.states:
             old_action = policy[s]
-            policy[s] = argmax over a of Q(s, a)
+            policy[s] = max(
+                mdp.actions,
+                key=lambda a: sum(
+                    mdp.P(s_next, s, a) * (mdp.R(s, a, s_next) + gamma * V[s_next])
+                    for s_next in mdp.states
+                ),
+            )
             if old_action != policy[s]:
                 policy_stable = False
 
@@ -202,7 +208,16 @@ def value_iteration(mdp, gamma=0.9, tol=1e-6):
             break
 
     # 최적 정책 추출
-    policy = {s: argmax_a Q_star(s, a) for s in mdp.states}
+    policy = {
+        s: max(
+            mdp.actions,
+            key=lambda a: sum(
+                mdp.P(s_next, s, a) * (mdp.R(s, a, s_next) + gamma * V[s_next])
+                for s_next in mdp.states
+            ),
+        )
+        for s in mdp.states
+    }
     return policy, V
 ```
 

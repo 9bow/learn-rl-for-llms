@@ -9,11 +9,11 @@ learning_objectives:
   - 시각적 환각(visual hallucination) 문제와 RL을 통한 해결 가능성을 이해한다
 estimated_minutes: 25
 references:
-  - title: "LLaVA: Visual Instruction Tuning"
+  - title: "Visual Instruction Tuning"
     url: "https://arxiv.org/abs/2304.08485"
   - title: "Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond"
     url: "https://arxiv.org/abs/2308.12966"
-  - title: "RLHF-V: Towards Trustworthy MLLMs via Behavior Alignment from Fine-Grained Correctional Human Feedback"
+  - title: "RLHF-V: Towards Trustworthy MLLMs via Behavior Alignment from Fine-grained Correctional Human Feedback"
     url: "https://arxiv.org/abs/2312.00849"
   - title: "LLaMA-Adapter V2: Parameter-Efficient Visual Instruction Model"
     url: "https://arxiv.org/abs/2304.15010"
@@ -47,7 +47,7 @@ LLM (예: LLaMA, Qwen)
     LLM --> Response["응답 생성"]
     Response --> RM["보상 모델/검증기"]
     RM --> Signal["보상 신호"]
-    Signal --> RL["RL 최적화\n(PPO/DPO/GRPO)"]
+    Signal --> RL["후학습\n(PPO/GRPO 또는 DPO)"]
     RL --> LLM
 `} caption="Vision-Language RL 개요: 이미지와 텍스트를 통합하여 RL로 최적화하는 VLM 파이프라인" client:load />
 
@@ -78,13 +78,13 @@ $$\mathbf{v} = \text{ViT}(I) \in \mathbb{R}^{N \times d}$$
 
 ### 탐색 공간의 차이
 
-텍스트 RL에서 정책은 이산 토큰 공간을 탐색합니다. VLM RL에서는 여기에 더해 이미지 인코딩의 연속 공간이 추가됩니다. 이는 탐색의 복잡도를 높이고 안정적인 학습을 더 어렵게 만듭니다.
+텍스트 RL에서 정책은 이산 토큰 공간을 탐색합니다. 이미지 조건부 텍스트 생성의 행동은 여전히 출력 토큰입니다. 이미지가 연속 표현이라는 이유만으로 행동 공간에 픽셀 선택이 추가되는 것은 아닙니다. 시각 정보로 조건화하고 보상을 검증하는 난도가 높아집니다.
 
 ## RL 적용 가능 지점
 
 VLM 아키텍처에서 RL은 여러 지점에 적용될 수 있습니다.
 
-**전체 파인튜닝(Full Fine-tuning)**: LLM과 Projection Layer 전체를 업데이트합니다. 최고 성능을 기대할 수 있지만 계산 비용이 매우 높습니다.
+**전체 파인튜닝(Full Fine-tuning)**: 학습 대상으로 정한 시각 인코더·프로젝터·언어 모델을 업데이트합니다. 전 구성요소 학습 여부를 명시하며, 많은 파라미터를 업데이트한다고 최고 성능이 보장되지는 않습니다.
 
 **LLM만 RL**: Vision Encoder와 Projection Layer는 고정하고 LLM만 업데이트합니다. 가장 일반적인 접근법입니다.
 

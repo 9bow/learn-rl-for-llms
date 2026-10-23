@@ -9,12 +9,12 @@ learning_objectives:
   - "PRM 기반 검증이 테스트 타임 스케일링 효율을 높이는 이유를 파악한다"
 estimated_minutes: 28
 references:
-  - title: "Scaling LLM Test-Time Compute Optimally Can be More Effective than Scaling Model Parameters"
+  - title: "Scaling LLM Test-Time Compute Optimally can be More Effective than Scaling Model Parameters"
     authors: "Snell, C., Lee, J., Xu, K., & Kumar, A."
     year: 2024
     url: "https://arxiv.org/abs/2408.03314"
-  - title: "Scaling of Search and Learning: A Roadmap to Reproduce o1 from Reinforcement Learning Perspective"
-    authors: "Qin, Z., et al."
+  - title: "Inference Scaling Laws: An Empirical Analysis of Compute-Optimal Inference for Problem-Solving with Language Models"
+    authors: "Wu, Y., et al."
     year: 2024
     url: "https://arxiv.org/abs/2408.00724"
   - title: "Let's Verify Step by Step"
@@ -31,7 +31,7 @@ references:
 
 **테스트 타임 스케일링(Test-Time Scaling, TTS)** 은 다른 접근이다. 고정된 모델로 추론 시 더 많은 계산을 투자하여 성능을 향상시킨다. "생각의 시간"을 늘리는 것이다.
 
-Snell et al. (2024, ICLR 2025)은 최적화된 테스트 타임 연산이 파라미터 스케일링보다 효율적일 수 있음을 보였다. 특히, 14배 작은 모델이 테스트 타임 연산을 4배 늘렸을 때 더 큰 모델과 동등한 성능을 달성했다.
+Snell et al. (2024, ICLR 2025)은 최적화된 테스트 타임 연산이 파라미터 스케일링보다 효율적일 수 있음을 보였다. 논문은 문제 난이도에 맞춘 연산 배분이 best-of-N 기준선보다 4배 이상 효율적일 수 있음을 보고했다. 별도의 FLOPs 일치 비교에서는 작은 모델이 이미 일정 성공률을 가진 문제에서 14배 큰 모델을 능가할 수 있었다. 두 조건을 하나의 실험으로 섞지 않는다.
 
 ## Best-of-N 샘플링
 
@@ -41,7 +41,7 @@ $$
 y^* = \argmax_{y \in \{y_1, \ldots, y_N\}} r(x, y)
 $$
 
-성능은 $N$에 따라 향상되며, 이론적으로 $N \to \infty$이면 모델의 최대 능력에 수렴한다. 실용적으로는 $N = 4 \sim 64$ 범위가 많이 사용된다. 단점은 계산 비용이 $N$에 선형으로 증가한다는 것이다.
+완벽한 선택기라면 후보 중 정답을 찾을 기회가 늘어난다. 실제 보상 모델의 오류 때문에 선택된 답의 독립 품질이 N에 따라 단조롭게 향상된다는 보장은 없다. 실용적으로는 $N = 4 \sim 64$ 범위가 많이 사용된다. 단점은 계산 비용이 $N$에 선형으로 증가한다는 것이다.
 
 ## 다수결 투표 (Self-Consistency)
 
@@ -79,7 +79,7 @@ $$
 
 ## PRM 기반 검증과의 시너지
 
-테스트 타임 스케일링은 **PRM(Process Reward Model)** 과 결합할 때 가장 효과적이다. PRM이 각 추론 단계의 품질을 평가하므로, Best-of-N이나 빔 서치에서 더 정확한 선택이 가능하다.
+테스트 타임 스케일링은 **PRM(Process Reward Model)** 과 결합할 수 있다. PRM이 각 추론 단계의 품질을 평가하므로, Best-of-N이나 빔 서치에서 더 정확한 선택이 가능하다.
 
 Lightman et al.의 연구에서 PRM을 사용한 Best-of-N은 ORM이나 다수결 투표보다 훨씬 효율적임이 증명되었다.
 
@@ -96,10 +96,4 @@ Lightman et al.의 연구에서 PRM을 사용한 Best-of-N은 ORM이나 다수�
 
 ## Inference Scaling Laws
 
-Qin et al. (2024, arXiv:2408.00724)는 추론 스케일링 법칙을 체계적으로 연구했다. 주요 발견은 성능이 추론 연산의 로그에 비례하여 향상된다는 것이다.
-
-$$
-\text{성능} \propto \log(\text{추론 연산량})
-$$
-
-이는 훈련 스케일링 법칙과 유사한 형태다. 또한 모델 크기와 추론 연산량 사이에 최적 균형이 존재하며, 작은 모델에 더 많은 추론 연산을 투자하는 것이 큰 모델에 적은 연산을 쓰는 것보다 효율적인 경우가 있다. 이 발견은 추론 스케일링이 파라미터 스케일링의 대안이 아닌 **보완적 축** 임을 시사한다.
+arXiv:2408.00724 연구는 추론 스케일링 법칙을 체계적으로 연구했다. 이 연구는 모델 크기와 greedy·다수결·best-of-N·트리 탐색의 연산 대비 성능을 비교한다. 특정 MATH 설정에서 Llemma-7B와 탐색 조합이 더 큰 모델을 능가하는 사례를 보고한다. 성능이 연산의 로그에 비례한다는 보편 식은 아니다. 문제 난이도·선택기·생성기와 전체 FLOPs를 함께 비교한다.

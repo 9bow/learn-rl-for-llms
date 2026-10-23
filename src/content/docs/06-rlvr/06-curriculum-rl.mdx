@@ -10,11 +10,11 @@ learning_objectives:
 estimated_minutes: 25
 references:
   - title: "Self-Evolving Curriculum for LLM Reasoning"
-    authors: "Feng, X., et al."
+    authors: "Chen, X., et al."
     year: 2025
     url: "https://arxiv.org/abs/2505.14970"
   - title: "VL-Cogito: Progressive Curriculum Reinforcement Learning for Advanced Multimodal Reasoning"
-    authors: "Li, X., et al."
+    authors: "Yuan, R., et al."
     year: 2025
     url: "https://arxiv.org/abs/2507.22607"
   - title: "WebRL: Training LLM Web Agents via Self-Evolving Online Curriculum Reinforcement Learning"
@@ -37,7 +37,7 @@ RLVR에서 무작위로 샘플링한 문제로 학습하면 두 가지 문제가
 
 구현 방법:
 1. 전체 문제집을 난이도별로 분류 (정답률, 풀이 단계 수 등으로 추정)
-2. 초기 $T_1$ 스텝: 하위 30% 난이도 문제만 사용
+2. 초기 $T_1$ 스텝: 하위 30% (교육용 예시)의 난이도 문제만 사용
 3. 중간 $T_2$ 스텝: 하위 60% 난이도 문제 사용
 4. 이후: 전체 문제 사용
 
@@ -51,23 +51,7 @@ RLVR에서 무작위로 샘플링한 문제로 학습하면 두 가지 문제가
 
 각 난이도 구간 $k$를 하나의 "팔(arm)"로 모델링한다. 각 배치에서 어느 난이도 구간에서 문제를 샘플링할지 MAB가 결정하고, 학습 신호(보상 분산, 성능 향상)를 피드백으로 받아 다음 선택을 조정한다.
 
-사용하는 MAB 알고리즘은 일반적으로 **UCB(Upper Confidence Bound)** 또는 **Thompson Sampling** 이다.
-
-$$
-k^* = \argmax_k \left[ \mu_k + c\sqrt{\frac{\ln t}{n_k}} \right]
-$$
-
-여기서 $\mu_k$는 난이도 구간 $k$의 평균 학습 신호, $n_k$는 방문 횟수, $t$는 전체 스텝, $c$는 탐색-활용 균형 계수다.
-
-### 학습 신호 정의
-
-MAB의 보상은 다음 중 하나로 정의한다.
-
-- **보상 분산**: $\text{Var}(r_1, \ldots, r_G)$. 분산이 높을수록 학습이 활발하게 이루어짐
-- **성능 향상률**: 연속된 배치 간 정답률 변화
-- **엔트로피 감소**: 정책 엔트로피의 감소율
-
-arXiv:2505.14970에서 MAB 기반 자기 진화 커리큘럼은 고정 커리큘럼 대비 MATH에서 3~5% 향상을 보고했다.
+SEC 논문은 비정상 Multi-Armed Bandit으로 문제 범주를 선택하고, 정책 기울기의 절대 advantage를 즉시 학습 이득의 대리 신호로 사용합니다. 범주 선택 정책은 TD(0) 방식으로 갱신합니다. 일반적인 UCB·Thompson Sampling 공식을 그 논문의 실제 알고리즘으로 대신하지 않습니다.
 
 ## WebRL의 자기 진화 커리큘럼
 
@@ -79,15 +63,7 @@ WebRL의 커리큘럼은 **온라인** 으로 동작한다. 모델이 현재 배
 
 **VL-Cogito** (arXiv:2507.22607)는 시각-언어(Vision-Language) 모델의 다모달 추론 강화를 위한 점진적 커리큘럼을 제안한다.
 
-VL 모델의 추론 난이도는 언어 추론 난이도 외에 시각 정보의 복잡도(해상도, 물체 수, 공간 관계 등)가 추가된다. VL-Cogito는 이 두 차원을 동시에 고려하는 **2D 커리큘럼** 을 설계한다.
-
-| 단계 | 시각 복잡도 | 언어 추론 복잡도 |
-|------|----------|--------------|
-| 1단계 | 낮음 (단순 이미지) | 낮음 (단순 QA) |
-| 2단계 | 중간 | 낮음 또는 중간 |
-| 3단계 | 높음 | 높음 (복잡 추론) |
-
-이 점진적 접근으로 MathVista, MMStar 등 시각 추론 벤치마크에서 기존 방법 대비 유의미한 향상을 보고했다.
+VL-Cogito의 PCuRL은 여러 단계의 난이도 상승, 온라인 난이도 soft weighting, 동적 길이 보상을 결합합니다. 임의의 시각·언어 두 축 표가 원 논문의 알고리즘은 아닙니다. 정확성과 추론 효율을 함께 평가합니다.
 
 ## Prompt Curriculum Learning
 
@@ -107,7 +83,7 @@ $$
 | 재현성 | 높음 | 낮음 (확률적) |
 | 모델 학습 속도 반응 | 없음 | 있음 |
 | 하이퍼파라미터 수 | 적음 | 많음 |
-| 최종 성능 | 기준 | 일반적으로 더 높음 |
+| 최종 성능 | 기준 실험 | 과제·선택 정책에 따라 달라짐 |
 | 디버깅 용이성 | 쉬움 | 어려움 |
 
 실용적으로는 고정 Easy-to-Hard로 시작하여 기준선을 확립하고, 이후 적응적 커리큘럼으로 성능을 개선하는 순서가 권장된다. 적응적 커리큘럼의 MAB 구성 요소는 학습 다이나믹스를 모니터링하는 진단 도구로도 유용하게 활용할 수 있다.

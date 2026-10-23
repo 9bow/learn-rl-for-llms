@@ -13,10 +13,10 @@ references:
     authors: "Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al."
     year: 2022
     url: "https://arxiv.org/abs/2203.02155"
-  - title: "Reinforcement Learning for Language Models"
-    authors: "Carta, T., Romac, C., Wolf, T., Lamprier, S., Sigaud, O., & Oudeyer, P. Y."
+  - title: "Is Reinforcement Learning (Not) for Natural Language Processing: Benchmarks, Baselines, and Building Blocks for Natural Language Policy Optimization"
+    authors: "Ramamurthy, R., et al."
     year: 2023
-    url: "https://arxiv.org/abs/2307.07171"
+    url: "https://arxiv.org/abs/2210.01241"
   - title: "Fine-Tuning Language Models from Human Preferences"
     authors: "Ziegler, D. M., Stiennon, N., Wu, J., Brown, T. B., Radford, A., et al."
     year: 2019
@@ -54,7 +54,7 @@ graph LR
     R -.-> F
 `} caption="Figure 1: LLM as RL Agent Mapping" client:load />
 
-이 매핑에서 중요한 특성은 전이 함수가 **결정적(deterministic)** 이라는 점입니다. 행동(토큰)이 결정되면 다음 상태는 유일하게 정해집니다. 따라서 LLM RL의 확률성은 오직 정책(토큰 샘플링)에서 비롯됩니다.
+이 매핑에서 중요한 특성은 전이 함수가 **결정적(deterministic)** 이라는 점입니다. 행동(토큰)이 결정되면 다음 상태는 유일하게 정해집니다. 이는 외부 도구·사용자가 없는 단일 응답의 접두사 전이에 대한 설명입니다. 도구 결과·검색·사용자 반응을 포함한 환경은 추가 확률성을 가질 수 있습니다.
 
 ## 행동 공간의 특수성
 
@@ -78,16 +78,16 @@ LLM 텍스트 생성은 에피소드 과제입니다. 각 에피소드는:
 
 ## 토큰 수준 vs 문장 수준 RL
 
-보상을 언제, 어떻게 부여하느냐에 따라 RL 설정이 크게 달라집니다:
+행동의 단위와 보상의 시점은 별개입니다. 최종 응답 보상만 있어도 토큰 수준 MDP와 정책 손실을 사용할 수 있습니다. 아래는 보상 신호의 세밀도를 비교합니다:
 
 | 특성 | 토큰 수준 (Token-level) | 문장 수준 (Sentence-level) |
 |------|------------------------|--------------------------|
 | 보상 시점 | 매 토큰 생성 시 | 완전한 응답 완성 후 |
 | 보상 예시 | KL 페널티 $-\beta \log \frac{\pi}{\pi_{ref}}$ | 보상 모델 점수 $r_\phi(x, y)$ |
-| 신용 할당 | 명확 (각 토큰의 기여 구분) | 어려움 (희소 보상) |
+| 신용 할당 | 토큰별 점수가 있어도 기여 판정은 어려울 수 있음 | 최종 보상에서 장기 기여 추정 |
 | 구현 복잡도 | 높음 | 낮음 |
 | 분산 | 낮음 | 높음 |
-| LLM 적합성 | 부분적 (KL 항에만 적용) | 주류 RLHF 방식 |
+| 구현 관계 | PPO·GRPO의 정책 손실은 보통 토큰 수준 | 최종 보상을 토큰 손실에 연결 가능 |
 
 실제 RLHF 구현(InstructGPT, Ziegler et al. 2019)에서는 **혼합 방식** 을 사용합니다:
 - 토큰 수준: KL 페널티를 매 토큰에 적용
@@ -109,7 +109,7 @@ $$r_t = \begin{cases} r_\phi(x, y) - \beta \log \frac{\pi_\theta(y_t \mid s_t)}{
 |------|------------|---------|
 | 행동 단위 | 완성된 응답 | 개별 토큰 |
 | 적합 알고리즘 | DPO, REINFORCE | PPO, A3C |
-| 신용 할당 | 불필요 | 필수 |
+| 신용 할당 | 응답을 하나의 행동으로 평가 | 토큰별 기여를 추정 |
 | 구현 복잡도 | 낮음 | 높음 |
 | 대표 연구 | DPO (Rafailov et al. 2023) | RLHF (Ouyang et al. 2022) |
 

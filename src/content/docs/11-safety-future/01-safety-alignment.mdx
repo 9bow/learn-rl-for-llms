@@ -9,9 +9,9 @@ learning_objectives:
   - "Alignment Tax 문제와 이를 완화하는 접근법을 비교할 수 있다"
 estimated_minutes: 30
 references:
-  - title: "MTSA: Multi-Turn Safety Alignment for LLMs via Adversarial Co-Evolution"
+  - title: "MTSA: Multi-turn Safety Alignment for LLMs through Multi-round Red-teaming"
     url: "https://arxiv.org/abs/2505.17147"
-  - title: "Safety Instincts: Towards Intrinsic Safety for LLMs"
+  - title: "Safety Instincts: LLMs Learn to Trust Their Internal Compass for Self-Defense"
     url: "https://arxiv.org/abs/2510.01088"
   - title: "Efficient Safety Alignment of Large Language Models via Preference Re-ranking and Representation-based Reward Modeling"
     url: "https://aclanthology.org/2025.acl-long.1504/"
@@ -77,7 +77,7 @@ $$\phi_{target}^{(t+1)} = \arg\max_{\phi} \mathbb{E}\left[ r_{target}(\text{dial
 
 ### 효과
 
-MTSA로 훈련된 모델은 훈련 시 보지 못한 새로운 공격 패턴에도 robust합니다. 레드팀이 지속적으로 새로운 공격을 발견하고, 타겟 모델이 이에 대응하는 과정에서 일반적인 방어 능력이 학습됩니다.
+MTSA는 논문이 평가한 공격 설정에서 안전성 개선을 보고합니다. 모든 새로운 공격에 견고하다는 보장은 아닙니다. 레드팀이 지속적으로 새로운 공격을 발견하고, 타겟 모델이 이에 대응하는 과정에서 일반적인 방어 능력이 학습됩니다.
 
 ## Safety Instincts: 내재적 신뢰 신호
 
@@ -91,21 +91,15 @@ MTSA로 훈련된 모델은 훈련 시 보지 못한 새로운 공격 패턴에�
 
 $$H(p(y_t | y_{<t}, x)) = \begin{cases} \text{낮음} & \text{명확히 거부해야 할 때} \\ \text{높음} & \text{위험한 생성 직전} \end{cases}$$
 
-**은닉 상태의 분리**: 안전한 vs. 위험한 응답을 생성할 때 중간 레이어의 은닉 상태가 선형적으로 분리 가능합니다.
+### SIRL의 학습 신호
 
-### 자기 방어 메커니즘
+Safety Instincts Reinforcement Learning(SIRL)은 관찰한 신뢰도·엔트로피 차이를 자기 생성 보상으로 사용하여 안전한 거부 행동을 강화합니다. 런타임에서 엔트로피 임계값 하나를 넘으면 위험 상태로 전환하는 탐지기와는 다릅니다.
 
-Safety Instincts는 이 내재적 신호를 활용하여 **자기 방어(self-defense)** 메커니즘을 구현합니다:
-
-1. 생성 과정에서 각 토큰의 엔트로피를 모니터링
-2. 엔트로피가 임계값을 초과하면 "위험 감지 상태"로 전환
-3. 이후 생성을 안전한 방향으로 조정하는 강화학습으로 미세 조정
-
-이 접근법의 장점은 추가적인 외부 모듈 없이 모델 자체가 안전성을 자율적으로 유지한다는 점입니다.
+낮은 엔트로피는 잘못된 답에서도 나타날 수 있습니다. 조사한 정렬 모델의 실험 결과를 보편적인 안전 판정 법칙으로 해석하지 않습니다. 공격 성공률과 정상 요청의 과도한 거부를 함께 평가합니다.
 
 ## 효율적 안전 정렬: DPO 기반 접근
 
-ACL 2025에 발표된 연구는 오프라인 선호 학습에서 생기는 분포 이동을 줄이기 위해 **선호 재순위화와 표현 기반 보상 모델링** 을 결합합니다. 기존 참고 링크는 다른 ACL 논문을 가리키고 있었으므로, 이 절에서는 실제 논문의 기여 범위에 맞춰 설명합니다.
+ACL 2025에 발표된 연구는 오프라인 선호 학습에서 생기는 분포 이동을 줄이기 위해 **선호 재순위화와 표현 기반 보상 모델링** 을 결합합니다. 실험의 모델·데이터·비교 방법을 원문과 함께 확인합니다.
 
 ### 안전 선호 최적화
 
@@ -134,7 +128,7 @@ Alignment Tax의 주요 원인:
 | 전략 | 방법 | 효과 |
 |------|------|------|
 | **데이터 혼합** | 안전 데이터와 일반 능력 데이터를 혼합 | 일반 능력 망각 완화 |
-| **LoRA 정렬** | 전체 파라미터가 아닌 LoRA 어댑터만 정렬 | 기존 능력 보존 |
+| **LoRA 정렬** | 일부 어댑터만 학습 | 비용 절감 가능, 능력 보존은 평가 필요 |
 | **다목적 보상** | 안전성과 유용성을 동시에 최적화하는 보상 함수 설계 | 균형 유지 |
 | **Constitutional AI** | 안전 원칙을 명시적으로 정의하여 과도한 거부 방지 | 정밀한 거부 |
 | **역할 분리** | 안전 거부용 모듈과 일반 응답 모듈의 분리 | 독립적 최적화 |

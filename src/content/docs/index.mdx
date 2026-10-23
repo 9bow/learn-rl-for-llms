@@ -28,3 +28,9 @@ import { CardGrid, LinkCard } from '@astrojs/starlight/components';
   <LinkCard title="10. RL 학습 인프라와 운영 (~1.5시간)" href="/learn-rl-for-llms/10-infrastructure/01-frameworks/" description="프레임워크, 분산·비동기 롤아웃과 재현 가능한 운영." />
   <LinkCard title="11. 안전성·평가·열린 문제 (~1.5시간)" href="/learn-rl-for-llms/11-safety-future/01-safety-alignment/" description="안전 정렬, 명세 게임, 감독·레드팀 평가와 열린 문제." />
 </CardGrid>
+
+## 학습과 재현 기준
+
+이 강의는 기초 RL부터 선호 최적화, 검증 가능한 보상, 멀티모달·에이전트 RL을 연결합니다. 논문의 역사적 실험 결과와 현재 라이브러리 API를 구분해 읽습니다. 특히 [GRPO·DAPO·Dr. GRPO](./05-reasoning-rl/03-dapo-drgrpo/)의 정규화 차이와 [프레임워크 지원 현황](./10-infrastructure/01-frameworks/)은 구현을 선택하기 전에 확인하세요.
+
+2026년 10월 23일 기준으로 참고문헌과 주요 수식을 검토했습니다. 예제의 작은 수치 검증과 대규모 모델 학습 재현은 서로 다른 검증 단계입니다. 성능을 비교할 때는 모델·데이터 분할·평가 버전·샘플 수·계산 예산을 함께 기록하세요.
